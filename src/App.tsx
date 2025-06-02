@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react'; // React는 직접 사용하지 않으므로 제거
 
 export default function App() {
   // Canvas 요소에 접근하기 위한 ref
@@ -17,9 +17,9 @@ export default function App() {
   // 실제 이미지 경로가 주어지지 않아 임시 플레이스홀더 이미지를 사용합니다.
   // 실제 이미지 파일을 사용하시려면 kosooni_character_40x40.png 경로를 여기에 넣어주세요.
   const kosooniImage = new Image();
-  kosooniImage.src = "https://placehold.co/40x40/FFD700/000000?text=K"; // 꼬순이 캐릭터 이미지 (임시 플레이스홀더)
+  kosooniImage.src = "/kosooni_character_40x40.png"; // 꼬순이 캐릭터 이미지 (public 폴더 경로)
 
-  // 타일 종류별 색상 정의
+  // 타일 종류별 색상 정의 (폭탄 색상 추가)
   const tileColors: Record<string, string> = {
     dirt: "#8B4513", // 흙
     copper: "#B87333", // 구리
@@ -35,20 +35,26 @@ export default function App() {
   const BOMB_EXPLOSION_RADIUS = 1; // 폭탄 폭발 시 제거되는 타일 범위 (중심으로부터 1칸, 총 3x3 영역)
 
   // 타일 타입 정의: 일반 광물은 문자열, 폭탄은 객체로 표현
-  type Tile = string | { type: 'bomb'; countdown: number; };
+  type MineralTileType = "dirt" | "copper" | "silver" | "gold" | "diamond" | "sweetpotato";
+  interface BombTileObject {
+    type: 'bomb';
+    countdown: number;
+  }
+  // 맵에 들어갈 수 있는 타일의 최종 타입 (null 포함)
+  type MapTile = MineralTileType | BombTileObject | null;
 
   // 맵 생성 함수
   const generateMap = useCallback(() => {
-    const tiles = ["dirt", "copper", "silver", "gold", "diamond", "sweetpotato"];
-    const map: (Tile | null)[][] = [];
+    const tiles: MineralTileType[] = ["dirt", "copper", "silver", "gold", "diamond", "sweetpotato"];
+    const map: MapTile[][] = []; // 맵 타입 명시
     for (let y = 0; y < MAP_HEIGHT; y++) {
-      const row: (Tile | null)[] = [];
+      const row: MapTile[] = []; // 행 타입 명시
       for (let x = 0; x < MAP_WIDTH; x++) {
-        let tile: Tile | null = null;
+        let tile: MapTile = null; // 타일 변수 타입 명시 및 초기화
         if (y >= 2) { // 상단 두 줄은 플레이어 시작 영역이므로 타일을 배치하지 않음
           const random = Math.random();
           if (random < 0.05) { // 5% 확률로 폭탄 타일 배치
-            tile = { type: 'bomb', countdown: BOMB_INITIAL_COUNTDOWN };
+            tile = { type: 'bomb', countdown: BOMB_INITIAL_COUNTDOWN } as BombTileObject; // 타입 단언 추가
           } else {
             // 나머지 95% 확률로 일반 광물 타일 배치
             tile = tiles[Math.floor(Math.random() * tiles.length)];
@@ -62,12 +68,12 @@ export default function App() {
   }, []); // 의존성 배열이 비어있으므로 컴포넌트 마운트 시 한 번만 생성
 
   // 게임 맵 상태
-  const [tileMap, setTileMap] = useState<(Tile | null)[][]>(generateMap);
+  const [tileMap, setTileMap] = useState<MapTile[][]>(generateMap);
   // 폭탄 점멸 효과를 위한 전역 상태 (모든 폭탄에 동일하게 적용)
   const [blinkingState, setBlinkingState] = useState(false);
 
   // 폭탄 폭발 처리 함수
-  const explodeBomb = useCallback((bombX: number, bombY: number, currentMap: (Tile | null)[][]) => {
+  const explodeBomb = useCallback((bombX: number, bombY: number, currentMap: MapTile[][]) => {
     // 맵의 불변성을 유지하기 위해 깊은 복사 수행
     const newMap = currentMap.map(row => [...row]);
     // 폭발 반경 내의 모든 타일 제거
@@ -100,7 +106,8 @@ export default function App() {
           for (let y = 0; y < MAP_HEIGHT; y++) {
             for (let x = 0; x < MAP_WIDTH; x++) {
               const tile = currentMap[y][x];
-              if (typeof tile === 'object' && tile.type === 'bomb') {
+              // 타일이 객체이고, 폭탄 타입인지 명확히 확인
+              if (typeof tile === 'object' && tile !== null && tile.type === 'bomb') {
                 if (tile.countdown > 0) {
                   // 폭탄 카운트다운 감소
                   currentMap[y][x] = { ...tile, countdown: tile.countdown - 1 };
@@ -192,32 +199,38 @@ export default function App() {
       // 타일 맵 그리기
       for (let y = 0; y < MAP_HEIGHT; y++) {
         for (let x = 0; x < MAP_WIDTH; x++) {
-          const tile = tileMap[y][x];
-          if (tile) {
-            if (typeof tile === 'string') { // 일반 광물 타일
-              context.fillStyle = tileColors[tile] || "gray"; // 타일 색상 설정
-              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); // 타일 그리기
-            } else if (tile.type === 'bomb') { // 폭탄 타일
-              // 폭탄 점멸 효과: 카운트다운이 1 이하이거나 전역 점멸 상태일 때만 그림
-              if (tile.countdown <= 1 || blinkingState) {
-                context.fillStyle = tileColors.bomb; // 폭탄 색상 설정
-                context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); // 폭탄 그리기
+          const tile = tileMap[y][x]; // 현재 타일 (MapTile 타입)
 
-                // 카운트다운 숫자 그리기
-                context.fillStyle = "white"; // 텍스트 색상
-                context.font = `${TILE_SIZE * 0.6}px Arial`; // 폰트 크기
-                context.textAlign = "center"; // 텍스트 중앙 정렬
-                context.textBaseline = "middle"; // 텍스트 수직 중앙 정렬
-                context.fillText(
-                  tile.countdown.toString(), // 카운트다운 숫자
-                  x * TILE_SIZE + TILE_SIZE / 2, // 텍스트 X 위치 (타일 중앙)
-                  y * TILE_SIZE + TILE_SIZE / 2 // 텍스트 Y 위치 (타일 중앙)
-                );
-              } else {
-                // 점멸 상태가 아니면 약간 어두운 색으로 그림 (폭탄이 활성 상태가 아님을 시각적으로 표현)
-                context.fillStyle = "#800000"; // 어두운 빨강
-                context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-              }
+          if (tile === null) { // 타일이 비어있으면 그리지 않고 다음으로
+            continue;
+          }
+
+          // 타일이 문자열(광물) 타입인 경우
+          if (typeof tile === 'string') {
+            context.fillStyle = tileColors[tile] || "gray"; // 타일 색상 설정
+            context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); // 타일 그리기
+          }
+          // 타일이 객체이고 폭탄 타입인 경우
+          else if (typeof tile === 'object' && tile.type === 'bomb') {
+            // 폭탄 점멸 효과: 카운트다운이 1 이하이거나 전역 점멸 상태일 때만 그림
+            if (tile.countdown <= 1 || blinkingState) {
+              context.fillStyle = tileColors.bomb; // 폭탄 색상 설정
+              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE); // 폭탄 그리기
+
+              // 카운트다운 숫자 그리기
+              context.fillStyle = "white"; // 텍스트 색상
+              context.font = `${TILE_SIZE * 0.6}px Arial`; // 폰트 크기
+              context.textAlign = "center"; // 텍스트 중앙 정렬
+              context.textBaseline = "middle"; // 텍스트 수직 중앙 정렬
+              context.fillText(
+                tile.countdown.toString(), // 카운트다운 숫자
+                x * TILE_SIZE + TILE_SIZE / 2, // 텍스트 X 위치 (타일 중앙)
+                y * TILE_SIZE + TILE_SIZE / 2 // 텍스트 Y 위치 (타일 중앙)
+              );
+            } else {
+              // 점멸 상태가 아니면 약간 어두운 색으로 그림 (폭탄이 활성 상태가 아님을 시각적으로 표현)
+              context.fillStyle = "#800000"; // 어두운 빨강
+              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
           }
         }
