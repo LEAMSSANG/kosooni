@@ -211,16 +211,24 @@ export default function App() {
           });
 
           let newPlayerY = position.y;
-          let didMoveDown = false; // 플레이어가 아래로 이동했는지 여부 플래그
+          let fellThisTick = false; // 플레이어가 이번 틱에 낙하했는지 여부
 
-          // 플레이어 바로 아래 타일 확인
+          // 1. 현재 플레이어 위치가 빈 공간이면, 아래로 계속 낙하 시도
+          let currentTile = currentMap[newPlayerY]?.[position.x];
+          while (currentTile === null && newPlayerY + 1 < currentMap.length) {
+              newPlayerY++;
+              currentTile = currentMap[newPlayerY]?.[position.x];
+              fellThisTick = true;
+          }
+
+          // 2. 플레이어 바로 아래 타일 확인 (일반적인 낙하 또는 채굴)
           const tileBelowPlayer = currentMap[newPlayerY + 1]?.[position.x];
 
           if (newPlayerY + 1 < currentMap.length) { // 맵의 실제 높이(currentMap.length)를 기준으로 확인
             if (tileBelowPlayer === null) {
-              // 아래 타일이 비어있으면 플레이어 낙하
+              // 아래 타일이 비어있으면 플레이어 낙하 (한 칸)
               newPlayerY++;
-              didMoveDown = true;
+              fellThisTick = true;
             } else if (typeof tileBelowPlayer === 'object' && tileBelowPlayer.type !== 'bomb') { // 광물 타일인 경우
               const mineralTile = tileBelowPlayer as MineralTileObject;
               if (mineralTile.health > DRILL_ATTACK_POWER) {
@@ -230,7 +238,7 @@ export default function App() {
                 // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                 currentMap[newPlayerY + 1][position.x] = null;
                 newPlayerY++;
-                didMoveDown = true;
+                fellThisTick = true;
                 // 고구마 타일 파괴 시 체력 회복
                 if (mineralTile.type === 'sweetpotato') {
                   setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
@@ -248,19 +256,7 @@ export default function App() {
             currentMap.push(generateNewRow());
           }
 
-          // 빈 공간으로 떨어지는 로직 (폭탄 폭발 후 빈 공간으로 떨어지는 경우 포함)
-          // 현재 위치의 타일이 null이거나, 아래 타일이 null인데 플레이어가 이동하지 않았다면 강제 낙하 시도
-          const currentTile = currentMap[newPlayerY]?.[position.x];
-          if (currentTile === null && !didMoveDown) { // 현재 위치가 빈 공간인데 아래로 이동하지 않았다면
-              // 강제로 한 칸 아래로 이동 시도
-              if (newPlayerY + 1 < currentMap.length) {
-                  newPlayerY++;
-                  didMoveDown = true;
-              }
-          }
-
-
-          if (didMoveDown) { // 플레이어가 실제로 아래로 이동했을 때만 위치 업데이트
+          if (fellThisTick) { // 플레이어가 실제로 아래로 이동했을 때만 위치 업데이트
             setPosition((prev) => ({ x: prev.x, y: newPlayerY }));
             // 스크롤 오프셋 계산
             if (newPlayerY >= SCROLL_THRESHOLD_Y) {
@@ -370,31 +366,32 @@ export default function App() {
       return;
     }
 
-    // 반응형 캔버스 크기 조정 로직 개선
-    // 화면 너비에 꽉 차도록 100vw를 기준으로 계산
-    const availableWidth = window.innerWidth;
+    // 캔버스 크기 조정 로직: CSS 크기를 기반으로 내부 해상도 설정
+    const canvasCssWidth = canvas.clientWidth;
+    const canvasCssHeight = canvas.clientHeight;
+
+    canvas.width = canvasCssWidth;
+    canvas.height = canvasCssHeight;
+
     // 맵의 가로세로 비율
     const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); 
+    
+    // 캔버스의 실제 비율
+    const canvasAspectRatio = canvasCssWidth / canvasCssHeight;
 
-    let newCanvasWidth = availableWidth;
-    let newCanvasHeight = availableWidth / mapAspectRatio;
+    let scale;
+    let offsetX = 0;
+    let offsetY_draw = 0; // drawing offset Y
 
-    // 캔버스 높이가 화면 높이를 초과하지 않도록 조정
-    // 게임 화면일 때는 상단 여백을 없애고, 스토리/오프닝 화면일 때는 기존 여백을 유지
-    const maxCanvasHeight = window.innerHeight - (gamePhase === 'game' ? 0 : window.innerHeight * 0.1); 
-    if (newCanvasHeight > maxCanvasHeight) {
-      newCanvasHeight = maxCanvasHeight;
-      newCanvasWidth = newCanvasHeight * mapAspectRatio;
+    if (canvasAspectRatio > mapAspectRatio) {
+      // 캔버스가 맵보다 가로로 넓을 때 (세로를 기준으로 스케일)
+      scale = canvasCssHeight / (TILE_SIZE * MAP_HEIGHT);
+      offsetX = (canvasCssWidth - (TILE_SIZE * MAP_WIDTH * scale)) / 2;
+    } else {
+      // 캔버스가 맵보다 세로로 길거나 같을 때 (가로를 기준으로 스케일)
+      scale = canvasCssWidth / (TILE_SIZE * MAP_WIDTH);
+      offsetY_draw = (canvasCssHeight - (TILE_SIZE * MAP_HEIGHT * scale)) / 2;
     }
-
-    // 캔버스 크기를 타일 크기의 배수로 유지하여 픽셀 깨짐 방지
-    newCanvasWidth = Math.floor(newCanvasWidth / TILE_SIZE) * TILE_SIZE;
-    newCanvasHeight = Math.floor(newCanvasHeight / TILE_SIZE) * TILE_SIZE;
-
-    canvas.width = newCanvasWidth;
-    canvas.height = newCanvasHeight;
-
-    const scale = newCanvasWidth / (TILE_SIZE * MAP_WIDTH); // 스케일 비율 계산
 
     const draw = () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
@@ -402,6 +399,7 @@ export default function App() {
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       context.save(); // 현재 변환 상태 저장
+      context.translate(offsetX, offsetY_draw); // 중앙 정렬을 위한 이동
       context.scale(scale, scale); // 스케일 적용
 
       // 맵 그리기 (스크롤 오프셋 적용)
@@ -489,8 +487,9 @@ export default function App() {
 
       // 체력 하트 그리기 (캔버스 스케일과 별개로 고정 위치에)
       context.save();
-      // 스케일이 적용된 상태에서 하트가 그려지지 않도록 스케일 복원
-      context.scale(1 / scale, 1 / scale); // 스케일 되돌리기
+      // 하트 그리기는 캔버스 자체의 좌표계를 따르므로, 스케일링된 컨텍스트에서 벗어나야 함.
+      // 하지만 이미 캔버스 해상도가 CSS 크기와 같으므로, 별도의 스케일 되돌리기는 필요 없음.
+      // 대신, 하트 위치를 캔버스 CSS 크기에 맞춰 직접 계산.
 
       const heartSize = 25 * 0.7; // 하트 크기 (70%로 줄임)
       const heartSpacing = 5; // 하트 간 간격
@@ -498,8 +497,8 @@ export default function App() {
       const startY = 10; // 좌상단 시작 Y 위치
 
       for (let i = 0; i < PLAYER_MAX_HEALTH; i++) {
-        const heartX = (startX + i * (heartSize + heartSpacing)) * scale; // 스케일 적용된 좌표
-        const heartY = startY * scale; // 스케일 적용된 좌표
+        const heartX = startX + i * (heartSize + heartSpacing);
+        const heartY = startY;
 
         if (i < currentHealth) {
           // 채워진 하트 (빨간색)
@@ -533,16 +532,16 @@ export default function App() {
     const handleResize = () => {
       const canvas = canvasRef.current;
       if (canvas) {
-        // 반응형 캔버스 크기 조정 로직 개선 (좌우폭 최적화)
-        const availableWidth = window.innerWidth; // 화면 전체 너비 사용
-        // 게임 화면일 때는 상단 여백을 없애고, 스토리/오프닝 화면일 때는 기존 여백을 유지
-        const availableHeight = window.innerHeight - (gamePhase === 'game' ? 0 : window.innerHeight * 0.1); 
+        // 캔버스가 화면 너비에 꽉 차도록 설정
+        const availableWidth = window.innerWidth;
+        const availableHeight = window.innerHeight;
 
         const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); 
 
         let newCanvasWidth = availableWidth;
         let newCanvasHeight = availableWidth / mapAspectRatio;
 
+        // 만약 계산된 높이가 화면 높이를 초과하면, 화면 높이에 맞춰 너비를 재조정
         if (newCanvasHeight > availableHeight) {
           newCanvasHeight = availableHeight;
           newCanvasWidth = newCanvasHeight * mapAspectRatio;
@@ -552,15 +551,14 @@ export default function App() {
         newCanvasWidth = Math.floor(newCanvasWidth / TILE_SIZE) * TILE_SIZE;
         newCanvasHeight = Math.floor(newCanvasHeight / TILE_SIZE) * TILE_SIZE;
 
-        // 최종 캔버스 크기는 맵의 실제 크기를 넘지 않도록 제한 (선택 사항, 필요 시 활성화)
-        // newCanvasWidth = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
-        // newCanvasHeight = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
-
-        canvas.width = newCanvasWidth;
-        canvas.height = newCanvasHeight;
+        canvas.style.width = `${newCanvasWidth}px`; // CSS width 설정
+        canvas.style.height = `${newCanvasHeight}px`; // CSS height 설정
+        // 내부 해상도는 draw 함수에서 clientWidth/clientHeight로 설정
       }
     };
     window.addEventListener("resize", handleResize);
+    // 초기 로드 시에도 크기 조정 적용
+    handleResize();
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
@@ -568,13 +566,19 @@ export default function App() {
     };
   }, [handleKeyDown, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, gamePhase]); // gamePhase 의존성 추가
 
-  // 모바일 터치 이벤트 핸들러
+  // 모바일 터치 이벤트 핸들러 (전체 화면 터치 유지)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 터치 이동 무시
-    // 이 핸들러는 전체 화면 터치 영역을 담당하므로, 버튼 클릭과 겹치지 않도록 주의
-    // 버튼 클릭은 별도의 onClick 핸들러로 처리됨
     e.preventDefault(); // 기본 스크롤 방지
-  }, [gamePhase]); // gamePhase 의존성 추가
+    const touchX = e.touches[0].clientX; // 첫 번째 터치의 X 좌표
+    const screenWidth = window.innerWidth;
+
+    if (touchX < screenWidth / 2) {
+      movePlayer("left"); // 화면 좌측 터치 시 좌측 이동
+    } else {
+      movePlayer("right"); // 화면 우측 터치 시 우측 이동
+    }
+  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
 
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
@@ -663,32 +667,10 @@ export default function App() {
         <div className="relative w-full h-full flex items-center justify-center"> {/* 캔버스 및 버튼을 감싸는 컨테이너 */}
           <canvas
             ref={canvasRef}
-            className="border-4 border-yellow-400 rounded-lg shadow-lg" // mb-4 제거
+            // 캔버스 자체의 border, shadow 제거하여 부모 컨테이너가 전체 배경을 맡도록 함
           ></canvas>
 
-          {/* 좌우 화살표 아이콘 (캔버스 위에 오버레이) */}
-          <div className="absolute inset-0 flex justify-between items-center w-full h-full pointer-events-none"> {/* pointer-events-none 추가 */}
-            <button
-              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none pointer-events-auto" // pointer-events-auto 추가
-              onClick={() => movePlayer("left")}
-              aria-label="Move Left"
-              style={{ marginLeft: '10px' }} // 캔버스 가장자리에서 약간 안쪽으로
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none pointer-events-auto" // pointer-events-auto 추가
-              onClick={() => movePlayer("right")}
-              aria-label="Move Right"
-              style={{ marginRight: '10px' }} // 캔버스 가장자리에서 약간 안쪽으로
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+          {/* 좌우 화살표 아이콘 제거됨 */}
         </div>
       )}
     </div>
