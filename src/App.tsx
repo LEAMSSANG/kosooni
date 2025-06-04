@@ -27,34 +27,59 @@ export default function App() {
   };
 
   const BOMB_INITIAL_COUNTDOWN = 3; // 폭탄 초기 카운트다운 시간 (초)
-  const BOMB_EXPLOSION_RADIUS = 0; // 폭탄 폭발 시 제거되는 타일 범위 (0: 자신만 제거)
+  const BOMB_EXPLOSION_RADIUS = 1; // 폭탄 폭발 시 제거되는 타일 범위 (1: 3x3 영역)
+  const DRILL_ATTACK_POWER = 1; // 드릴의 기본 공격력
 
-  // 타일 타입 정의: 일반 광물은 문자열, 폭탄은 객체로 표현
+  // 캐릭터 체력 관련 상수
+  const PLAYER_INITIAL_HEALTH = 3; // 꼬순이 초기 체력
+  const PLAYER_MAX_HEALTH = 5;     // 꼬순이 최대 체력
+
+  // 타일 타입 정의: 광물 타일은 체력을 가짐
   type MineralTileType = "dirt" | "copper" | "silver" | "gold" | "diamond" | "sweetpotato";
+  interface MineralTileObject {
+    type: MineralTileType;
+    health: number;
+  }
   interface BombTileObject {
     type: 'bomb';
-    countdown: number;
+    countdown: number | null; // 카운트다운이 시작되지 않았을 때는 null
   }
   // 맵에 들어갈 수 있는 타일의 최종 타입 (null 포함)
-  type MapTile = MineralTileType | BombTileObject | null;
+  type MapTile = MineralTileObject | BombTileObject | null;
+
+  // 각 광물 타입별 기본 체력 정의
+  const MINERAL_HEALTH: Record<MineralTileType, number> = {
+    dirt: 1,
+    copper: 2,
+    silver: 3,
+    gold: 4,
+    diamond: 5,
+    sweetpotato: 1, // 고구마는 특수 광물이지만, 현재는 쉽게 채굴 가능하도록 체력 1
+  };
 
   // 새로운 타일 행을 생성하는 함수
   const generateNewRow = useCallback(() => {
-    const tiles: MineralTileType[] = ["dirt", "copper", "silver", "gold", "diamond", "sweetpotato"];
+    const tiles: MineralTileType[] = ["dirt", "copper", "silver", "gold", "diamond"]; // 고구마 제외
     const row: MapTile[] = [];
     for (let x = 0; x < MAP_WIDTH; x++) {
       let tile: MapTile = null;
       const random = Math.random();
-      if (random < 0.05) { // 5% 확률로 폭탄 타일 배치
-        tile = { type: 'bomb', countdown: BOMB_INITIAL_COUNTDOWN } as BombTileObject;
+      const BOMB_PROBABILITY = 0.05; // 폭탄 생성 확률 5%
+      const SWEETPOTATO_PROBABILITY = 0.01; // 고구마 생성 확률 1% (낮춤)
+
+      if (random < BOMB_PROBABILITY) {
+        tile = { type: 'bomb', countdown: null } as BombTileObject;
+      } else if (random < BOMB_PROBABILITY + SWEETPOTATO_PROBABILITY) {
+        tile = { type: 'sweetpotato', health: MINERAL_HEALTH.sweetpotato } as MineralTileObject;
       } else {
-        // 나머지 95% 확률로 일반 광물 타일 배치
-        tile = tiles[Math.floor(Math.random() * tiles.length)];
+        // 나머지 광물 타일 생성
+        const selectedTileType = tiles[Math.floor(Math.random() * tiles.length)];
+        tile = { type: selectedTileType, health: MINERAL_HEALTH[selectedTileType] } as MineralTileObject;
       }
       row.push(tile);
     }
     return row;
-  }, [MAP_WIDTH, BOMB_INITIAL_COUNTDOWN]);
+  }, [MAP_WIDTH]);
 
   // 초기 맵 생성 함수
   const generateInitialMap = useCallback(() => {
@@ -71,6 +96,7 @@ export default function App() {
 
   const [tileMap, setTileMap] = useState<MapTile[][]>(generateInitialMap);
   const [blinkingState, setBlinkingState] = useState(false);
+  const [currentHealth, setCurrentHealth] = useState(PLAYER_INITIAL_HEALTH); // 꼬순이 현재 체력 상태
 
   const explodeBomb = useCallback((bombX: number, bombY: number, currentMap: MapTile[][]) => {
     const newMap = currentMap.map(row => [...row]);
@@ -109,9 +135,17 @@ export default function App() {
             for (let x = 0; x < MAP_WIDTH; x++) {
               const tile = currentMap[y][x];
               if (typeof tile === 'object' && tile !== null && tile.type === 'bomb') {
-                if (tile.countdown > 0) {
+                // 폭탄 활성화 로직: 캐릭터가 5타일 이내에 있으면 카운트다운 시작
+                const distance = Math.max(
+                  Math.abs(x - position.x),
+                  Math.abs(y - position.y)
+                );
+
+                if (tile.countdown === null && distance <= 5) {
+                  currentMap[y][x] = { ...tile, countdown: BOMB_INITIAL_COUNTDOWN };
+                } else if (typeof tile.countdown === 'number' && tile.countdown > 0) {
                   currentMap[y][x] = { ...tile, countdown: tile.countdown - 1 };
-                } else {
+                } else if (typeof tile.countdown === 'number' && tile.countdown === 0) {
                   bombsToExplode.push({ x, y });
                 }
               }
@@ -123,27 +157,44 @@ export default function App() {
           });
 
           let newPlayerY = position.y;
+          let didMoveDown = false; // 플레이어가 아래로 이동했는지 여부 플래그
+
+          // 플레이어 바로 아래 타일 확인
           const tileBelowPlayer = currentMap[newPlayerY + 1]?.[position.x];
 
-          if (newPlayerY + 1 < currentMap.length) {
+          if (newPlayerY + 1 < currentMap.length) { // 맵의 실제 높이(currentMap.length)를 기준으로 확인
             if (tileBelowPlayer === null) {
+              // 아래 타일이 비어있으면 플레이어 낙하
               newPlayerY++;
-            } else if (typeof tileBelowPlayer === 'string') {
-              currentMap[newPlayerY + 1][position.x] = null;
-              newPlayerY++;
+              didMoveDown = true;
+            } else if (typeof tileBelowPlayer === 'object' && tileBelowPlayer.type !== 'bomb') { // 광물 타일인 경우
+              const mineralTile = tileBelowPlayer as MineralTileObject;
+              if (mineralTile.health > DRILL_ATTACK_POWER) {
+                // 체력 감소, 플레이어는 현재 위치 유지
+                currentMap[newPlayerY + 1][position.x] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
+              } else {
+                // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
+                currentMap[newPlayerY + 1][position.x] = null;
+                newPlayerY++;
+                didMoveDown = true;
+                // 고구마 타일 파괴 시 체력 회복
+                if (mineralTile.type === 'sweetpotato') {
+                  setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+                }
+              }
             } else if (typeof tileBelowPlayer === 'object' && tileBelowPlayer.type === 'bomb') {
-              // 폭탄 위에서는 멈춤
+              // 폭탄 위에서는 멈춤. 폭탄은 독립적으로 카운트다운 진행.
+              // 플레이어 위치나 폭탄 상태에 변화 없음.
             }
           }
 
           // 무한 맵 로직: 플레이어가 맵의 끝에 가까워지면 새로운 행 추가
-          const MAP_GENERATE_THRESHOLD = currentMap.length - MAP_HEIGHT; // 맵의 끝에서 MAP_HEIGHT만큼 남았을 때
+          const MAP_GENERATE_THRESHOLD = currentMap.length - MAP_HEIGHT;
           if (newPlayerY >= MAP_GENERATE_THRESHOLD) {
-            // 새로운 행을 추가
             currentMap.push(generateNewRow());
           }
 
-          if (newPlayerY !== position.y) {
+          if (didMoveDown) { // 플레이어가 실제로 아래로 이동했을 때만 위치 업데이트
             setPosition((prev) => ({ x: prev.x, y: newPlayerY }));
             // 스크롤 오프셋 계산
             if (newPlayerY >= SCROLL_THRESHOLD_Y) {
@@ -159,7 +210,7 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow]);
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]); // PLAYER_MAX_HEALTH 의존성 추가
 
   useEffect(() => {
     const blinkInterval = setInterval(() => {
@@ -168,17 +219,55 @@ export default function App() {
     return () => clearInterval(blinkInterval);
   }, []);
 
+  // 플레이어 좌우 이동 및 타일 상호작용 (공격) 함수
   const movePlayer = useCallback((direction: "left" | "right") => {
-    setPosition((prev) => {
-      let { x } = prev;
-      let newX = x;
+    setTileMap((prevMap) => {
+      const currentMap = prevMap.map(row => [...row]); // 맵 불변성 유지
+      let { x, y } = position; // 현재 플레이어 위치
 
-      if (direction === "left") newX = Math.max(0, x - 1);
-      else if (direction === "right") newX = Math.min(MAP_WIDTH - 1, x + 1);
+      let targetX = x;
+      if (direction === "left") targetX = Math.max(0, x - 1);
+      else if (direction === "right") targetX = Math.min(MAP_WIDTH - 1, x + 1);
 
-      return { x: newX, y: prev.y };
+      // 이동하려는 위치에 타일이 있는지 확인
+      const tileAtTarget = currentMap[y]?.[targetX];
+
+      let playerMoved = false;
+
+      if (tileAtTarget !== undefined && tileAtTarget !== null) { // 타일이 존재하면
+        if (typeof tileAtTarget === 'object' && tileAtTarget.type !== 'bomb') { // 광물 타일인 경우
+          const mineralTile = tileAtTarget as MineralTileObject;
+          if (mineralTile.health > DRILL_ATTACK_POWER) {
+            // 체력 감소, 플레이어는 현재 위치 유지
+            currentMap[y][targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
+          } else {
+            // 체력이 0 이하가 되면 타일 파괴, 플레이어 이동
+            currentMap[y][targetX] = null;
+            playerMoved = true;
+            // 고구마 타일 파괴 시 체력 회복
+            if (mineralTile.type === 'sweetpotato') {
+              setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+            }
+          }
+        } else if (typeof tileAtTarget === 'object' && tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
+          // 폭탄 타일인 경우, 비활성 상태면 활성화
+          if (tileAtTarget.countdown === null) {
+            currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
+          }
+          // 활성 상태면 그대로 둠 (터치해도 바로 터지지 않음)
+          // 폭탄 타일 위로 이동하지 않음
+        }
+      } else { // 목표 위치가 비어있는 공간 (null)인 경우
+        playerMoved = true;
+      }
+
+      if (playerMoved) {
+        setPosition({ x: targetX, y: y });
+      }
+
+      return currentMap; // 업데이트된 맵 반환
     });
-  }, [MAP_WIDTH]);
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]); // PLAYER_MAX_HEALTH 의존성 추가
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "ArrowLeft") movePlayer("left");
@@ -224,40 +313,55 @@ export default function App() {
       context.scale(scale, scale); // 스케일 적용
 
       // 맵 그리기 (스크롤 오프셋 적용)
-      // 화면에 보이는 MAP_HEIGHT만큼만 그림
-      // 시작 Y 좌표는 scrollOffset을 TILE_SIZE로 나눈 값
       const startDrawY = Math.floor(scrollOffset / TILE_SIZE);
       for (let y = 0; y < MAP_HEIGHT; y++) {
         for (let x = 0; x < MAP_WIDTH; x++) {
-          // 실제 맵 데이터의 y 좌표는 스크롤된 부분부터 시작
           const actualMapY = startDrawY + y;
-          const tile = tileMap[actualMapY]?.[x]; // 실제 맵 데이터에서 타일 가져오기
+          const tile = tileMap[actualMapY]?.[x];
 
           if (tile === null || tile === undefined) {
             continue;
           }
 
-          if (typeof tile === 'string') {
-            context.fillStyle = tileColors[tile] || "gray";
+          // 광물 타일 그리기
+          if (typeof tile === 'object' && tile.type !== 'bomb') {
+            const mineralTile = tile as MineralTileObject;
+            context.fillStyle = tileColors[mineralTile.type] || "gray";
             context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
-          else if (typeof tile === 'object' && tile.type === 'bomb') {
-            if (tile.countdown <= 1 || blinkingState) {
-              context.fillStyle = tileColors.bomb;
-              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-              context.fillStyle = "white";
-              context.font = `${TILE_SIZE * 0.6}px Arial`;
-              context.textAlign = "center";
-              context.textBaseline = "middle";
+            // 체력 숫자 그리기
+            context.fillStyle = "white";
+            context.font = `${TILE_SIZE * 0.4}px Arial`; // 더 작은 폰트
+            context.textAlign = "center";
+            context.textBaseline = "top"; // 타일 상단에 위치
+            context.fillText(
+              mineralTile.health.toString(),
+              x * TILE_SIZE + TILE_SIZE / 2,
+              y * TILE_SIZE + TILE_SIZE * 0.1 // 상단에서 약간 오프셋
+            );
+          }
+          // 폭탄 타일 그리기
+          else if (typeof tile === 'object' && tile.type === 'bomb') {
+            if (tile.countdown === null) {
+              context.fillStyle = "#800000"; // 비활성 폭탄 색상
+            } else if (tile.countdown <= 1 || blinkingState) {
+              context.fillStyle = tileColors.bomb; // 활성 폭탄 색상
+            } else {
+              context.fillStyle = "#800000"; // 활성 폭탄이지만 점멸 상태가 아닐 때 (어둡게)
+            }
+            context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+            // 카운트다운 숫자 그리기 (활성 상태일 때만)
+            if (typeof tile.countdown === 'number') {
+              context.fillStyle = "white"; // 텍스트 색상
+              context.font = `${TILE_SIZE * 0.6}px Arial`; // 폰트 크기
+              context.textAlign = "center"; // 텍스트 중앙 정렬
+              context.textBaseline = "middle"; // 텍스트 수직 중앙 정렬
               context.fillText(
                 tile.countdown.toString(),
                 x * TILE_SIZE + TILE_SIZE / 2,
                 y * TILE_SIZE + TILE_SIZE / 2
               );
-            } else {
-              context.fillStyle = "#800000";
-              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
           }
         }
@@ -277,10 +381,47 @@ export default function App() {
       );
 
       context.restore(); // 저장된 변환 상태 복원 (스케일 초기화)
+
+      // 체력 하트 그리기 (캔버스 스케일과 별개로 고정 위치에)
+      context.save();
+      // 스케일이 적용된 상태에서 하트가 그려지지 않도록 스케일 복원
+      context.scale(1 / scale, 1 / scale); // 스케일 되돌리기
+
+      const heartSize = 25; // 하트 크기
+      const heartSpacing = 5; // 하트 간 간격
+      const startX = 10; // 좌상단 시작 X 위치
+      const startY = 10; // 좌상단 시작 Y 위치
+
+      for (let i = 0; i < PLAYER_MAX_HEALTH; i++) {
+        const heartX = (startX + i * (heartSize + heartSpacing)) * scale; // 스케일 적용된 좌표
+        const heartY = startY * scale; // 스케일 적용된 좌표
+
+        if (i < currentHealth) {
+          // 채워진 하트 (빨간색)
+          context.fillStyle = "#FF0000"; // 빨간색 하트
+          context.beginPath();
+          context.moveTo(heartX + heartSize * 0.5, heartY + heartSize * 0.3);
+          context.bezierCurveTo(heartX + heartSize * 0.1, heartY, heartX, heartY + heartSize * 0.6, heartX + heartSize * 0.5, heartY + heartSize);
+          context.bezierCurveTo(heartX + heartSize, heartY + heartSize * 0.6, heartX + heartSize * 0.9, heartY, heartX + heartSize * 0.5, heartY + heartSize * 0.3);
+          context.closePath();
+          context.fill();
+        } else {
+          // 비어있는 하트 (회색 테두리)
+          context.strokeStyle = "#888888"; // 회색 테두리
+          context.lineWidth = 2;
+          context.beginPath();
+          context.moveTo(heartX + heartSize * 0.5, heartY + heartSize * 0.3);
+          context.bezierCurveTo(heartX + heartSize * 0.1, heartY, heartX, heartY + heartSize * 0.6, heartX + heartSize * 0.5, heartY + heartSize);
+          context.bezierCurveTo(heartX + heartSize, heartY + heartSize * 0.6, heartX + heartSize * 0.9, heartY, heartX + heartSize * 0.5, heartY + heartSize * 0.3);
+          context.closePath();
+          context.stroke();
+        }
+      }
+      context.restore(); // 저장된 변환 상태 복원
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, scrollOffset, SCROLL_THRESHOLD_Y]);
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH]); // currentHealth, PLAYER_MAX_HEALTH 의존성 추가
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
