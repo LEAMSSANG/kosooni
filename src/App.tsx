@@ -170,7 +170,7 @@ export default function App() {
   const JUMP_OFFSET_DURATION = 100; // 낙하 애니메이션 지속 시간 (ms)
   const GAME_TICK_INTERVAL = 500; // 게임 루프 실행 간격 (ms)
 
-  // 캐릭터가 화면 중앙에 고정되기 시작하는 Y 좌표 (타일 기준)
+  // 캐릭터가 화면 중간에 고정되기 시작하는 Y 좌표 (타일 기준)
   const SCROLL_THRESHOLD_Y = Math.floor(MAP_HEIGHT / 3); // 예를 들어, 화면 높이의 1/3 지점
 
   useEffect(() => {
@@ -247,6 +247,18 @@ export default function App() {
           if (newPlayerY >= MAP_GENERATE_THRESHOLD) {
             currentMap.push(generateNewRow());
           }
+
+          // 빈 공간으로 떨어지는 로직 (폭탄 폭발 후 빈 공간으로 떨어지는 경우 포함)
+          // 현재 위치의 타일이 null이거나, 아래 타일이 null인데 플레이어가 이동하지 않았다면 강제 낙하 시도
+          const currentTile = currentMap[newPlayerY]?.[position.x];
+          if (currentTile === null && !didMoveDown) { // 현재 위치가 빈 공간인데 아래로 이동하지 않았다면
+              // 강제로 한 칸 아래로 이동 시도
+              if (newPlayerY + 1 < currentMap.length) {
+                  newPlayerY++;
+                  didMoveDown = true;
+              }
+          }
+
 
           if (didMoveDown) { // 플레이어가 실제로 아래로 이동했을 때만 위치 업데이트
             setPosition((prev) => ({ x: prev.x, y: newPlayerY }));
@@ -359,22 +371,24 @@ export default function App() {
     }
 
     // 반응형 캔버스 크기 조정 로직 개선
-    const availableWidth = window.innerWidth * 0.9; // 화면 너비의 90% 사용
-    const availableHeight = window.innerHeight - 100; // 대략적인 타이틀, 패딩, 여백 제외
-
-    const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); // 맵의 가로세로 비율 (WIDTH / HEIGHT)
+    // 화면 너비에 꽉 차도록 100vw를 기준으로 계산
+    const availableWidth = window.innerWidth;
+    // 맵의 가로세로 비율
+    const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); 
 
     let newCanvasWidth = availableWidth;
     let newCanvasHeight = availableWidth / mapAspectRatio;
 
-    if (newCanvasHeight > availableHeight) {
-      newCanvasHeight = availableHeight;
-      newCanvasWidth = availableHeight * mapAspectRatio;
+    // 캔버스 높이가 화면 높이를 초과하지 않도록 조정
+    const maxCanvasHeight = window.innerHeight - (window.innerHeight * 0.1); // 상단 여백 고려
+    if (newCanvasHeight > maxCanvasHeight) {
+      newCanvasHeight = maxCanvasHeight;
+      newCanvasWidth = newCanvasHeight * mapAspectRatio;
     }
 
-    // 최종 캔버스 크기는 맵의 실제 크기를 넘지 않도록 제한
-    newCanvasWidth = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
-    newCanvasHeight = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
+    // 캔버스 크기를 타일 크기의 배수로 유지하여 픽셀 깨짐 방지
+    newCanvasWidth = Math.floor(newCanvasWidth / TILE_SIZE) * TILE_SIZE;
+    newCanvasHeight = Math.floor(newCanvasHeight / TILE_SIZE) * TILE_SIZE;
 
     canvas.width = newCanvasWidth;
     canvas.height = newCanvasHeight;
@@ -518,20 +532,30 @@ export default function App() {
     const handleResize = () => {
       const canvas = canvasRef.current;
       if (canvas) {
-        const availableWidth = window.innerWidth * 0.9;
-        const availableHeight = window.innerHeight - 100;
-        const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT);
+        // 반응형 캔버스 크기 조정 로직 개선 (좌우폭 최적화)
+        const availableWidth = window.innerWidth; // 화면 전체 너비 사용
+        const availableHeight = window.innerHeight - (gamePhase === 'game' ? 0 : 100); // 게임 화면일 때는 상단 여백을 없앰
+
+        const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); 
 
         let newCanvasWidth = availableWidth;
         let newCanvasHeight = availableWidth / mapAspectRatio;
 
         if (newCanvasHeight > availableHeight) {
           newCanvasHeight = availableHeight;
-          newCanvasWidth = availableHeight * mapAspectRatio;
+          newCanvasWidth = newCanvasHeight * mapAspectRatio;
         }
+        
+        // 캔버스 크기를 타일 크기의 배수로 유지하여 픽셀 깨짐 방지
+        newCanvasWidth = Math.floor(newCanvasWidth / TILE_SIZE) * TILE_SIZE;
+        newCanvasHeight = Math.floor(newCanvasHeight / TILE_SIZE) * TILE_SIZE;
 
-        canvas.width = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
-        canvas.height = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
+        // 최종 캔버스 크기는 맵의 실제 크기를 넘지 않도록 제한
+        newCanvasWidth = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
+        newCanvasHeight = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
+
+        canvas.width = newCanvasWidth;
+        canvas.height = newCanvasHeight;
       }
     };
     window.addEventListener("resize", handleResize);
@@ -540,7 +564,7 @@ export default function App() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleResize);
     };
-  }, [handleKeyDown, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT]);
+  }, [handleKeyDown, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, gamePhase]); // gamePhase 의존성 추가
 
   // 모바일 터치 이벤트 핸들러
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -641,11 +665,33 @@ export default function App() {
       {/* 게임 화면 */}
       {gamePhase === 'game' && (
         <>
-          <h1 className="text-xl mb-4">꼬순이의 고구마 왕국 탐험기</h1>
+          {/* <h1 className="text-xl mb-4">꼬순이의 고구마 왕국 탐험기</h1> -- 제거됨 */}
           <canvas
             ref={canvasRef}
             className="border-4 border-yellow-400 mb-4 rounded-lg shadow-lg"
           ></canvas>
+
+          {/* 좌우 화살표 아이콘 추가 */}
+          <div className="absolute top-1/2 left-0 right-0 flex justify-between transform -translate-y-1/2 px-2 md:px-4">
+            <button
+              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none"
+              onClick={() => movePlayer("left")}
+              aria-label="Move Left"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none"
+              onClick={() => movePlayer("right")}
+              aria-label="Move Right"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </>
       )}
     </div>
