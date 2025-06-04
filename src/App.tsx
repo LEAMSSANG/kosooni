@@ -15,15 +15,20 @@ export default function App() {
   const kosooniImage = new Image();
   kosooniImage.src = "/kosooni_character_40x40.png"; // 꼬순이 캐릭터 이미지 (public 폴더 경로)
 
-  // 타일 종류별 색상 정의 (폭탄 색상 추가)
+  // 타일 이미지 로드 (새로 추가)
+  const sweetpotatoImage = new Image();
+  sweetpotatoImage.src = "/sweetpotato_better.png"; // 고구마 타일 이미지
+  const bombImage = new Image();
+  bombImage.src = "/bomb.png"; // 폭탄 타일 이미지
+
+  // 타일 종류별 색상 정의 (폭탄 색상 추가) - 이미지를 사용할 타일은 여기서 제거
   const tileColors: Record<string, string> = {
     dirt: "#8B4513", // 흙
     copper: "#B87333", // 구리
     silver: "#C0C0C0", // 은
     gold: "#FFD700", // 금
     diamond: "#00FFFF", // 다이아몬드
-    sweetpotato: "#FFA07A", // 고구마 (특수 광물)
-    bomb: "#FF0000", // 폭탄 (빨간색)
+    // sweetpotato와 bomb는 이제 이미지로 그릴 것이므로 여기서 색상 정의는 사용하지 않음
   };
 
   const BOMB_INITIAL_COUNTDOWN = 3; // 폭탄 초기 카운트다운 시간 (초)
@@ -68,7 +73,7 @@ export default function App() {
       const SWEETPOTATO_PROBABILITY = 0.01; // 고구마 생성 확률 1% (낮춤)
 
       if (random < BOMB_PROBABILITY) {
-        tile = { type: 'bomb', countdown: null } as BombTileObject;
+        tile = { type: 'bomb', countdown: null } as BombTileObject; // 초기 카운트다운은 null (비활성)
       } else if (random < BOMB_PROBABILITY + SWEETPOTATO_PROBABILITY) {
         tile = { type: 'sweetpotato', health: MINERAL_HEALTH.sweetpotato } as MineralTileObject;
       } else {
@@ -135,13 +140,13 @@ export default function App() {
             for (let x = 0; x < MAP_WIDTH; x++) {
               const tile = currentMap[y][x];
               if (typeof tile === 'object' && tile !== null && tile.type === 'bomb') {
-                // 폭탄 활성화 로직: 캐릭터가 5타일 이내에 있으면 카운트다운 시작
+                // 폭탄 활성화 로직: 캐릭터가 3타일 이내에 있으면 카운트다운 시작
                 const distance = Math.max(
                   Math.abs(x - position.x),
                   Math.abs(y - position.y)
                 );
 
-                if (tile.countdown === null && distance <= 5) {
+                if (tile.countdown === null && distance <= 3) { // 5 -> 3으로 변경
                   currentMap[y][x] = { ...tile, countdown: BOMB_INITIAL_COUNTDOWN };
                 } else if (typeof tile.countdown === 'number' && tile.countdown > 0) {
                   currentMap[y][x] = { ...tile, countdown: tile.countdown - 1 };
@@ -210,7 +215,7 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]); // PLAYER_MAX_HEALTH 의존성 추가
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]);
 
   useEffect(() => {
     const blinkInterval = setInterval(() => {
@@ -267,7 +272,7 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]); // PLAYER_MAX_HEALTH 의존성 추가
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === "ArrowLeft") movePlayer("left");
@@ -326,8 +331,14 @@ export default function App() {
           // 광물 타일 그리기
           if (typeof tile === 'object' && tile.type !== 'bomb') {
             const mineralTile = tile as MineralTileObject;
-            context.fillStyle = tileColors[mineralTile.type] || "gray";
-            context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            // 고구마 타일은 이미지로 그리기
+            if (mineralTile.type === 'sweetpotato') {
+              context.drawImage(sweetpotatoImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            } else {
+              // 나머지 광물 타일은 색상으로 그리기
+              context.fillStyle = tileColors[mineralTile.type] || "gray";
+              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
 
             // 체력 숫자 그리기
             context.fillStyle = "white";
@@ -342,14 +353,21 @@ export default function App() {
           }
           // 폭탄 타일 그리기
           else if (typeof tile === 'object' && tile.type === 'bomb') {
+            // 폭탄이 비활성 상태일 때는 어둡게, 활성 상태일 때만 점멸 및 카운트다운 표시
             if (tile.countdown === null) {
-              context.fillStyle = "#800000"; // 비활성 폭탄 색상
+              // 비활성 폭탄: 어둡게 그리기
+              context.globalAlpha = 0.5; // 투명도 조절
+              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.globalAlpha = 1.0; // 투명도 원복
             } else if (tile.countdown <= 1 || blinkingState) {
-              context.fillStyle = tileColors.bomb; // 활성 폭탄 색상
+              // 활성 폭탄 (점멸): 이미지 그리기
+              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
-              context.fillStyle = "#800000"; // 활성 폭탄이지만 점멸 상태가 아닐 때 (어둡게)
+              // 활성 폭탄이지만 점멸 상태가 아닐 때 (어둡게)
+              context.globalAlpha = 0.5; // 투명도 조절
+              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.globalAlpha = 1.0; // 투명도 원복
             }
-            context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
             // 카운트다운 숫자 그리기 (활성 상태일 때만)
             if (typeof tile.countdown === 'number') {
@@ -421,7 +439,7 @@ export default function App() {
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH]); // currentHealth, PLAYER_MAX_HEALTH 의존성 추가
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH]); // sweetpotatoImage, bombImage 의존성 추가
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
