@@ -56,7 +56,7 @@ export default function App() {
 
   // 게임 상수 정의
   const TILE_SIZE = 40; // 타일 하나의 크기 (픽셀)
-  const MAP_WIDTH = 10; // 맵의 가로 타일 개수
+  const MAP_WIDTH = 15; // 맵의 가로 타일 개수 (10 -> 15로 변경: 좌우 빈 공간 감소 목적)
   const MAP_HEIGHT = 20; // 화면에 보이는 맵의 세로 타일 개수
 
   // 타일 종류별 색상 정의 (이미지를 사용할 타일은 여기서 제거)
@@ -210,35 +210,32 @@ export default function App() {
             currentMap = explodeBomb(x, y, currentMap);
           });
 
-          let newPlayerY = position.y;
-          let fellThisTick = false; // 플레이어가 이번 틱에 낙하했는지 여부
+          let newPlayerY = position.y; // 현재 플레이어 Y 위치에서 시작
 
-          // 1. 현재 플레이어 위치가 빈 공간이면, 아래로 계속 낙하 시도
-          let currentTile = currentMap[newPlayerY]?.[position.x];
-          while (currentTile === null && newPlayerY + 1 < currentMap.length) {
+          // 낙하 로직 개선:
+          // 1. 현재 플레이어 위치의 타일이 null이면 (예: 폭탄 폭발 후) 연속 낙하
+          let currentTileAtNewY = currentMap[newPlayerY]?.[position.x];
+          while (currentTileAtNewY === null && newPlayerY + 1 < currentMap.length) {
               newPlayerY++;
-              currentTile = currentMap[newPlayerY]?.[position.x];
-              fellThisTick = true;
+              currentTileAtNewY = currentMap[newPlayerY]?.[position.x];
           }
 
-          // 2. 플레이어 바로 아래 타일 확인 (일반적인 낙하 또는 채굴)
+          // 2. 플레이어 바로 아래 타일과 상호작용 (채굴 또는 1칸 낙하)
           const tileBelowPlayer = currentMap[newPlayerY + 1]?.[position.x];
 
           if (newPlayerY + 1 < currentMap.length) { // 맵의 실제 높이(currentMap.length)를 기준으로 확인
             if (tileBelowPlayer === null) {
               // 아래 타일이 비어있으면 플레이어 낙하 (한 칸)
               newPlayerY++;
-              fellThisTick = true;
             } else if (typeof tileBelowPlayer === 'object' && tileBelowPlayer.type !== 'bomb') { // 광물 타일인 경우
               const mineralTile = tileBelowPlayer as MineralTileObject;
               if (mineralTile.health > DRILL_ATTACK_POWER) {
-                // 체력 감소, 플레이어는 현재 위치 유지
+                // 체력 감소, 플레이어는 현재 위치 유지 (newPlayerY 변경 없음)
                 currentMap[newPlayerY + 1][position.x] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
               } else {
                 // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                 currentMap[newPlayerY + 1][position.x] = null;
                 newPlayerY++;
-                fellThisTick = true;
                 // 고구마 타일 파괴 시 체력 회복
                 if (mineralTile.type === 'sweetpotato') {
                   setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
@@ -246,7 +243,6 @@ export default function App() {
               }
             } else if (typeof tileBelowPlayer === 'object' && tileBelowPlayer.type === 'bomb') {
               // 폭탄 위에서는 멈춤. 폭탄은 독립적으로 카운트다운 진행.
-              // 플레이어 위치나 폭탄 상태에 변화 없음.
             }
           }
 
@@ -256,7 +252,8 @@ export default function App() {
             currentMap.push(generateNewRow());
           }
 
-          if (fellThisTick) { // 플레이어가 실제로 아래로 이동했을 때만 위치 업데이트
+          // 플레이어 Y 위치가 변경되었을 경우에만 상태 업데이트
+          if (newPlayerY !== position.y) {
             setPosition((prev) => ({ x: prev.x, y: newPlayerY }));
             // 스크롤 오프셋 계산
             if (newPlayerY >= SCROLL_THRESHOLD_Y) {
@@ -272,7 +269,7 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]); // gamePhase 의존성 추가
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]);
 
   useEffect(() => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 점멸 효과 시작 안 함
@@ -280,7 +277,7 @@ export default function App() {
       setBlinkingState(prev => !prev);
     }, 200);
     return () => clearInterval(blinkInterval);
-  }, [gamePhase]); // gamePhase 의존성 추가
+  }, [gamePhase]);
 
   // 플레이어 좌우 이동 및 타일 상호작용 (공격) 함수
   const movePlayer = useCallback((direction: "left" | "right") => {
@@ -332,13 +329,13 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase]); // gamePhase 의존성 추가
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 키보드 입력 무시
     if (e.key === "ArrowLeft") movePlayer("left");
     else if (e.key === "ArrowRight") movePlayer("right");
-  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
+  }, [movePlayer, gamePhase]);
 
   // Canvas 그리기 로직
   useEffect(() => {
@@ -525,7 +522,7 @@ export default function App() {
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]); // gamePhase 의존성 추가
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -564,7 +561,7 @@ export default function App() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleResize);
     };
-  }, [handleKeyDown, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, gamePhase]); // gamePhase 의존성 추가
+  }, [handleKeyDown, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, gamePhase]);
 
   // 모바일 터치 이벤트 핸들러 (전체 화면 터치 유지)
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -578,7 +575,7 @@ export default function App() {
     } else {
       movePlayer("right"); // 화면 우측 터치 시 우측 이동
     }
-  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
+  }, [movePlayer, gamePhase]);
 
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
