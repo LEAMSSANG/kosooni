@@ -380,7 +380,8 @@ export default function App() {
     let newCanvasHeight = availableWidth / mapAspectRatio;
 
     // 캔버스 높이가 화면 높이를 초과하지 않도록 조정
-    const maxCanvasHeight = window.innerHeight - (window.innerHeight * 0.1); // 상단 여백 고려
+    // 게임 화면일 때는 상단 여백을 없애고, 스토리/오프닝 화면일 때는 기존 여백을 유지
+    const maxCanvasHeight = window.innerHeight - (gamePhase === 'game' ? 0 : window.innerHeight * 0.1); 
     if (newCanvasHeight > maxCanvasHeight) {
       newCanvasHeight = maxCanvasHeight;
       newCanvasWidth = newCanvasHeight * mapAspectRatio;
@@ -534,7 +535,8 @@ export default function App() {
       if (canvas) {
         // 반응형 캔버스 크기 조정 로직 개선 (좌우폭 최적화)
         const availableWidth = window.innerWidth; // 화면 전체 너비 사용
-        const availableHeight = window.innerHeight - (gamePhase === 'game' ? 0 : 100); // 게임 화면일 때는 상단 여백을 없앰
+        // 게임 화면일 때는 상단 여백을 없애고, 스토리/오프닝 화면일 때는 기존 여백을 유지
+        const availableHeight = window.innerHeight - (gamePhase === 'game' ? 0 : window.innerHeight * 0.1); 
 
         const mapAspectRatio = (TILE_SIZE * MAP_WIDTH) / (TILE_SIZE * MAP_HEIGHT); 
 
@@ -550,9 +552,9 @@ export default function App() {
         newCanvasWidth = Math.floor(newCanvasWidth / TILE_SIZE) * TILE_SIZE;
         newCanvasHeight = Math.floor(newCanvasHeight / TILE_SIZE) * TILE_SIZE;
 
-        // 최종 캔버스 크기는 맵의 실제 크기를 넘지 않도록 제한
-        newCanvasWidth = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
-        newCanvasHeight = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
+        // 최종 캔버스 크기는 맵의 실제 크기를 넘지 않도록 제한 (선택 사항, 필요 시 활성화)
+        // newCanvasWidth = Math.min(newCanvasWidth, TILE_SIZE * MAP_WIDTH);
+        // newCanvasHeight = Math.min(newCanvasHeight, TILE_SIZE * MAP_HEIGHT);
 
         canvas.width = newCanvasWidth;
         canvas.height = newCanvasHeight;
@@ -569,16 +571,10 @@ export default function App() {
   // 모바일 터치 이벤트 핸들러
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 터치 이동 무시
+    // 이 핸들러는 전체 화면 터치 영역을 담당하므로, 버튼 클릭과 겹치지 않도록 주의
+    // 버튼 클릭은 별도의 onClick 핸들러로 처리됨
     e.preventDefault(); // 기본 스크롤 방지
-    const touchX = e.touches[0].clientX; // 첫 번째 터치의 X 좌표
-    const screenWidth = window.innerWidth;
-
-    if (touchX < screenWidth / 2) {
-      movePlayer("left"); // 화면 좌측 터치 시 좌측 이동
-    } else {
-      movePlayer("right"); // 화면 우측 터치 시 우측 이동
-    }
-  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
+  }, [gamePhase]); // gamePhase 의존성 추가
 
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
@@ -594,8 +590,8 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 relative overflow-hidden" // overflow-hidden 추가
-      // 게임 단계일 때만 터치 이벤트 활성화
+      className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative overflow-hidden" // p-4 제거
+      // 게임 단계일 때만 터치 이벤트 활성화 (전체 화면 터치 영역)
       onTouchStart={gamePhase === 'game' ? handleTouchMove : undefined}
       onTouchMove={gamePhase === 'game' ? handleTouchMove : undefined}
     >
@@ -664,35 +660,36 @@ export default function App() {
 
       {/* 게임 화면 */}
       {gamePhase === 'game' && (
-        <>
-          {/* <h1 className="text-xl mb-4">꼬순이의 고구마 왕국 탐험기</h1> -- 제거됨 */}
+        <div className="relative w-full h-full flex items-center justify-center"> {/* 캔버스 및 버튼을 감싸는 컨테이너 */}
           <canvas
             ref={canvasRef}
-            className="border-4 border-yellow-400 mb-4 rounded-lg shadow-lg"
+            className="border-4 border-yellow-400 rounded-lg shadow-lg" // mb-4 제거
           ></canvas>
 
-          {/* 좌우 화살표 아이콘 추가 */}
-          <div className="absolute top-1/2 left-0 right-0 flex justify-between transform -translate-y-1/2 px-2 md:px-4">
+          {/* 좌우 화살표 아이콘 (캔버스 위에 오버레이) */}
+          <div className="absolute inset-0 flex justify-between items-center w-full h-full pointer-events-none"> {/* pointer-events-none 추가 */}
             <button
-              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none"
+              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none pointer-events-auto" // pointer-events-auto 추가
               onClick={() => movePlayer("left")}
               aria-label="Move Left"
+              style={{ marginLeft: '10px' }} // 캔버스 가장자리에서 약간 안쪽으로
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
             <button
-              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none"
+              className="bg-gray-700 bg-opacity-50 text-white p-3 rounded-full hover:bg-opacity-75 transition-opacity focus:outline-none pointer-events-auto" // pointer-events-auto 추가
               onClick={() => movePlayer("right")}
               aria-label="Move Right"
+              style={{ marginRight: '10px' }} // 캔버스 가장자리에서 약간 안쪽으로
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
