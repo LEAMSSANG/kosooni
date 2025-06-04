@@ -6,22 +6,60 @@ export default function App() {
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
 
+  // 게임 진행 단계 관리: 'opening' -> 'story' -> 'game'
+  const [gamePhase, setGamePhase] = useState<'opening' | 'story' | 'game'>('opening');
+
+  // 이미지 로딩 상태를 관리하는 State 추가
+  const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [loadedImageCount, setLoadedImageCount] = useState(0);
+  const totalImagesToLoad = 4; // 꼬순이, 고구마, 폭탄, 타이틀 배너 이미지
+
+  // 이미지 Ref들
+  const kosooniImage = useRef(new Image());
+  const sweetpotatoImage = useRef(new Image());
+  const bombImage = useRef(new Image());
+  const kosooniTitleBannerImage = useRef(new Image()); // 타이틀 배너 이미지 Ref 추가
+
+  // 이미지 로딩 처리 useEffect
+  useEffect(() => {
+    const handleImageLoad = () => {
+      setLoadedImageCount(prev => prev + 1);
+    };
+
+    // 각 이미지의 onload 이벤트 핸들러 등록
+    kosooniImage.current.onload = handleImageLoad;
+    sweetpotatoImage.current.onload = handleImageLoad;
+    bombImage.current.onload = handleImageLoad;
+    kosooniTitleBannerImage.current.onload = handleImageLoad; // 타이틀 배너 이미지 로드 핸들러
+
+    // 이미지 src 설정 (public 폴더 경로)
+    kosooniImage.current.src = "/kosooni_character_40x40.png";
+    sweetpotatoImage.current.src = "/sweetpotato_better.png";
+    bombImage.current.src = "/bomb.png";
+    kosooniTitleBannerImage.current.src = "/kosooni_title_banner_eng_v2.png"; // 타이틀 배너 이미지 경로
+
+    // 컴포넌트 언마운트 시 onload 핸들러 정리
+    return () => {
+      kosooniImage.current.onload = null;
+      sweetpotatoImage.current.onload = null;
+      bombImage.current.onload = null;
+      kosooniTitleBannerImage.current.onload = null;
+    };
+  }, []); // 컴포넌트 마운트 시 한 번만 실행
+
+  // 모든 이미지가 로드되었는지 확인
+  useEffect(() => {
+    if (loadedImageCount === totalImagesToLoad) {
+      setImagesLoaded(true);
+    }
+  }, [loadedImageCount]);
+
   // 게임 상수 정의
   const TILE_SIZE = 40; // 타일 하나의 크기 (픽셀)
   const MAP_WIDTH = 10; // 맵의 가로 타일 개수
   const MAP_HEIGHT = 20; // 화면에 보이는 맵의 세로 타일 개수
 
-  // 꼬순이 캐릭터 이미지 로드
-  const kosooniImage = new Image();
-  kosooniImage.src = "/kosooni_character_40x40.png"; // 꼬순이 캐릭터 이미지 (public 폴더 경로)
-
-  // 타일 이미지 로드 (새로 추가)
-  const sweetpotatoImage = new Image();
-  sweetpotatoImage.src = "/sweetpotato_better.png"; // 고구마 타일 이미지
-  const bombImage = new Image();
-  bombImage.src = "/bomb.png"; // 폭탄 타일 이미지
-
-  // 타일 종류별 색상 정의 (폭탄 색상 추가) - 이미지를 사용할 타일은 여기서 제거
+  // 타일 종류별 색상 정의 (이미지를 사용할 타일은 여기서 제거)
   const tileColors: Record<string, string> = {
     dirt: "#8B4513", // 흙
     copper: "#B87333", // 구리
@@ -32,7 +70,7 @@ export default function App() {
   };
 
   const BOMB_INITIAL_COUNTDOWN = 3; // 폭탄 초기 카운트다운 시간 (초)
-  const BOMB_EXPLOSION_RADIUS = 1; // 폭탄 폭발 시 제거되는 타일 범위 (1: 3x3 영역)
+  const BOMB_EXPLOSION_RADIUS = 2; // 폭탄 폭발 시 제거되는 타일 범위 (2: 5x5 영역)
   const DRILL_ATTACK_POWER = 1; // 드릴의 기본 공격력
 
   // 캐릭터 체력 관련 상수
@@ -105,6 +143,7 @@ export default function App() {
 
   const explodeBomb = useCallback((bombX: number, bombY: number, currentMap: MapTile[][]) => {
     const newMap = currentMap.map(row => [...row]);
+    // 폭발 범위 내의 모든 타일 제거
     for (let dy = -BOMB_EXPLOSION_RADIUS; dy <= BOMB_EXPLOSION_RADIUS; dy++) {
       for (let dx = -BOMB_EXPLOSION_RADIUS; dx <= BOMB_EXPLOSION_RADIUS; dx++) {
         const targetY = bombY + dy;
@@ -116,8 +155,16 @@ export default function App() {
         }
       }
     }
+
+    // 캐릭터가 폭발 범위 내에 있는지 확인하고 체력 감소
+    const playerDistX = Math.abs(position.x - bombX);
+    const playerDistY = Math.abs(position.y - bombY);
+    if (playerDistX <= BOMB_EXPLOSION_RADIUS && playerDistY <= BOMB_EXPLOSION_RADIUS) {
+      setCurrentHealth(prev => Math.max(0, prev - 1)); // 체력 1 감소, 0 미만으로 내려가지 않음
+    }
+
     return newMap;
-  }, [BOMB_EXPLOSION_RADIUS, MAP_WIDTH]);
+  }, [BOMB_EXPLOSION_RADIUS, MAP_WIDTH, position.x, position.y]);
 
   // 점프 모션 틱을 위한 새로운 상태 및 상수 추가
   const JUMP_OFFSET_DURATION = 100; // 낙하 애니메이션 지속 시간 (ms)
@@ -127,6 +174,8 @@ export default function App() {
   const SCROLL_THRESHOLD_Y = Math.floor(MAP_HEIGHT / 3); // 예를 들어, 화면 높이의 1/3 지점
 
   useEffect(() => {
+    if (!imagesLoaded || gamePhase !== 'game') return; // 이미지가 로드되지 않았거나 게임 단계가 아니면 게임 루프 시작 안 함
+
     const gameInterval = setInterval(() => {
       setOffsetY(-5); // 캐릭터가 살짝 위로 올라가는 듯한 애니메이션 효과 시작
       setTimeout(() => {
@@ -146,7 +195,7 @@ export default function App() {
                   Math.abs(y - position.y)
                 );
 
-                if (tile.countdown === null && distance <= 3) { // 5 -> 3으로 변경
+                if (tile.countdown === null && distance <= 3) {
                   currentMap[y][x] = { ...tile, countdown: BOMB_INITIAL_COUNTDOWN };
                 } else if (typeof tile.countdown === 'number' && tile.countdown > 0) {
                   currentMap[y][x] = { ...tile, countdown: tile.countdown - 1 };
@@ -215,17 +264,20 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]);
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]); // gamePhase 의존성 추가
 
   useEffect(() => {
+    if (gamePhase !== 'game') return; // 게임 단계가 아니면 점멸 효과 시작 안 함
     const blinkInterval = setInterval(() => {
       setBlinkingState(prev => !prev);
     }, 200);
     return () => clearInterval(blinkInterval);
-  }, []);
+  }, [gamePhase]); // gamePhase 의존성 추가
 
   // 플레이어 좌우 이동 및 타일 상호작용 (공격) 함수
   const movePlayer = useCallback((direction: "left" | "right") => {
+    if (gamePhase !== 'game') return; // 게임 단계가 아니면 이동 안 함
+
     setTileMap((prevMap) => {
       const currentMap = prevMap.map(row => [...row]); // 맵 불변성 유지
       let { x, y } = position; // 현재 플레이어 위치
@@ -272,12 +324,13 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH]);
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase]); // gamePhase 의존성 추가
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (gamePhase !== 'game') return; // 게임 단계가 아니면 키보드 입력 무시
     if (e.key === "ArrowLeft") movePlayer("left");
     else if (e.key === "ArrowRight") movePlayer("right");
-  }, [movePlayer]);
+  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
 
   // Canvas 그리기 로직
   useEffect(() => {
@@ -285,6 +338,25 @@ export default function App() {
     if (!canvas) return;
     const context = canvas.getContext("2d");
     if (!context) return;
+
+    // 이미지가 로드되지 않았거나 게임 단계가 아니면 로딩 메시지 또는 빈 화면 표시
+    if (!imagesLoaded) {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#000"; // 검은색 배경
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#FFF"; // 흰색 텍스트
+      context.font = "20px Arial";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText("로딩 중...", canvas.width / 2, canvas.height / 2);
+      return;
+    }
+
+    // 게임 단계가 아니면 캔버스 내용 지우기
+    if (gamePhase !== 'game') {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
     // 반응형 캔버스 크기 조정 로직 개선
     const availableWidth = window.innerWidth * 0.9; // 화면 너비의 90% 사용
@@ -333,7 +405,7 @@ export default function App() {
             const mineralTile = tile as MineralTileObject;
             // 고구마 타일은 이미지로 그리기
             if (mineralTile.type === 'sweetpotato') {
-              context.drawImage(sweetpotatoImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.drawImage(sweetpotatoImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
               // 나머지 광물 타일은 색상으로 그리기
               context.fillStyle = tileColors[mineralTile.type] || "gray";
@@ -357,15 +429,15 @@ export default function App() {
             if (tile.countdown === null) {
               // 비활성 폭탄: 어둡게 그리기
               context.globalAlpha = 0.5; // 투명도 조절
-              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.drawImage(bombImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
               context.globalAlpha = 1.0; // 투명도 원복
             } else if (tile.countdown <= 1 || blinkingState) {
               // 활성 폭탄 (점멸): 이미지 그리기
-              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.drawImage(bombImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             } else {
               // 활성 폭탄이지만 점멸 상태가 아닐 때 (어둡게)
               context.globalAlpha = 0.5; // 투명도 조절
-              context.drawImage(bombImage, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+              context.drawImage(bombImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
               context.globalAlpha = 1.0; // 투명도 원복
             }
 
@@ -391,7 +463,7 @@ export default function App() {
         : position.y * TILE_SIZE;
 
       context.drawImage(
-        kosooniImage,
+        kosooniImage.current,
         position.x * TILE_SIZE,
         kosooniDisplayY + offsetY,
         TILE_SIZE,
@@ -405,7 +477,7 @@ export default function App() {
       // 스케일이 적용된 상태에서 하트가 그려지지 않도록 스케일 복원
       context.scale(1 / scale, 1 / scale); // 스케일 되돌리기
 
-      const heartSize = 25; // 하트 크기
+      const heartSize = 25 * 0.7; // 하트 크기 (70%로 줄임)
       const heartSpacing = 5; // 하트 간 간격
       const startX = 10; // 좌상단 시작 X 위치
       const startY = 10; // 좌상단 시작 Y 위치
@@ -439,7 +511,7 @@ export default function App() {
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH]); // sweetpotatoImage, bombImage 의존성 추가
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]); // gamePhase 의존성 추가
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -472,6 +544,7 @@ export default function App() {
 
   // 모바일 터치 이벤트 핸들러
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (gamePhase !== 'game') return; // 게임 단계가 아니면 터치 이동 무시
     e.preventDefault(); // 기본 스크롤 방지
     const touchX = e.touches[0].clientX; // 첫 번째 터치의 X 좌표
     const screenWidth = window.innerWidth;
@@ -481,20 +554,100 @@ export default function App() {
     } else {
       movePlayer("right"); // 화면 우측 터치 시 우측 이동
     }
-  }, [movePlayer]);
+  }, [movePlayer, gamePhase]); // gamePhase 의존성 추가
+
+  // 오프닝 화면 클릭 핸들러
+  const handleOpeningClick = useCallback(() => {
+    if (imagesLoaded) { // 이미지가 모두 로드된 후에만 전환
+      setGamePhase('story');
+    }
+  }, [imagesLoaded]);
+
+  // 스토리 화면 완료 핸들러
+  const handleStoryComplete = useCallback(() => {
+    setGamePhase('game');
+  }, []);
 
   return (
     <div
       className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4 relative overflow-hidden" // overflow-hidden 추가
-      onTouchStart={handleTouchMove} // 터치 시작 시 이동 처리
-      onTouchMove={handleTouchMove} // 터치 이동 시에도 이동 처리 (계속 누르고 있을 때)
+      // 게임 단계일 때만 터치 이벤트 활성화
+      onTouchStart={gamePhase === 'game' ? handleTouchMove : undefined}
+      onTouchMove={gamePhase === 'game' ? handleTouchMove : undefined}
     >
-      <h1 className="text-xl mb-4">꼬순이의 고구마 왕국 탐험기</h1>
-      <canvas
-        ref={canvasRef}
-        className="border-4 border-yellow-400 mb-4 rounded-lg shadow-lg"
-      ></canvas>
-      {/* 하단 화살표 버튼 제거됨 */}
+      {/* 오프닝 화면 */}
+      {gamePhase === 'opening' && (
+        <div className="flex flex-col items-center justify-center w-full h-full cursor-pointer" onClick={handleOpeningClick}>
+          {!imagesLoaded ? (
+            <p className="text-xl">로딩 중...</p>
+          ) : (
+            <img
+              src={kosooniTitleBannerImage.current.src} // Ref의 src 사용
+              alt="꼬순이의 대모험"
+              className="max-w-full h-auto rounded-lg shadow-lg"
+              style={{ maxWidth: '80vw', maxHeight: '80vh' }} // 반응형 크기 조절
+            />
+          )}
+        </div>
+      )}
+
+      {/* 스토리 화면 */}
+      {gamePhase === 'story' && (
+        <div className="flex flex-col items-center justify-center text-center p-8 bg-gray-800 rounded-lg shadow-xl max-w-lg mx-auto">
+          <h2 className="text-3xl font-bold mb-6 text-yellow-400">꼬순이의 고구마 왕국 탐험기</h2>
+          <p className="text-lg mb-4 leading-relaxed">
+            산책을 나간 꼬순이는
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            우연히 노견들 사이의 수상한 대화를 듣게 돼.
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            그들은 오래전 사라졌다는
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            ‘고구마 왕국’과
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            그곳의 욕심 많은 황제에 대한 이야기를 나누고 있었어.
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            황제는 고구마를 독차지하기 위해
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            왕국 전체를 지하로 워프시켰다는 전설이 있었지.
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            이야기를 들은 꼬순이는
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            "내가 그 왕국을 찾아낼 거야!"
+          </p>
+          <p className="text-lg mb-4 leading-relaxed">
+            라고 결심하고,
+          </p>
+          <p className="text-lg mb-8 leading-relaxed">
+            아끼는 삑삑이 공으로 맞바꾼 드릴을 입에 물고
+            전설의 왕국을 향해 지하로 내려가기 시작해!
+          </p>
+          <button
+            className="bg-yellow-500 text-black px-8 py-3 rounded-lg shadow-md hover:bg-yellow-600 transition-colors text-xl font-bold"
+            onClick={handleStoryComplete}
+          >
+            모험 시작!
+          </button>
+        </div>
+      )}
+
+      {/* 게임 화면 */}
+      {gamePhase === 'game' && (
+        <>
+          <h1 className="text-xl mb-4">꼬순이의 고구마 왕국 탐험기</h1>
+          <canvas
+            ref={canvasRef}
+            className="border-4 border-yellow-400 mb-4 rounded-lg shadow-lg"
+          ></canvas>
+        </>
+      )}
     </div>
   );
 }
