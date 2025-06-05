@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null); // 'HTMLHTMLCanvasElement' -> 'HTMLCanvasElement' 수정
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [position, setPosition] = useState({ x: 5, y: 0 }); // 꼬순이의 논리적(절대) Y 위치
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
@@ -336,44 +336,45 @@ export default function App() {
           // 낙하 로직 개선: 매 틱마다 한 칸씩 떨어지거나, 블록과 상호작용
           let movedDownThisTick = false; // 수직 이동이 있었는지 확인
 
-          // 현재 위치에서 한 칸 아래 타일 확인
-          const tileBelowCurrentPos = currentMap[newPlayerY + 1]?.[newPlayerX];
+          // 다음 Y 위치가 맵 범위를 벗어나지 않는지 먼저 확인
+          if (newPlayerY + 1 < currentMap.length) {
+              const tileBelowCurrentPos = currentMap[newPlayerY + 1][newPlayerX]; // 이미 범위 체크했으므로 `?` 제거 가능
 
-          if (newPlayerY + 1 < currentMap.length && tileBelowCurrentPos === null) {
-              // 아래가 비어있으면 한 칸 낙하
-              newPlayerY++;
-              movedDownThisTick = true;
-              console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (empty space)`);
-          } else if (newPlayerY + 1 < currentMap.length && typeof tileBelowCurrentPos === 'object' && tileBelowCurrentPos.type === 'lava') {
-              // 아래가 용암이면 한 칸 낙하 (피해는 이후 로직에서 처리)
-              newPlayerY++;
-              movedDownThisTick = true;
-              console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (lava)`);
-          } else if (newPlayerY + 1 < currentMap.length && typeof tileBelowCurrentPos === 'object' && tileBelowCurrentPos.type !== 'bomb') {
-            // 아래가 광물 타일인 경우 (폭탄 제외)
-            const mineralTile = tileBelowCurrentPos as MineralTileObject;
-            console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}`);
-            if (mineralTile.health > DRILL_ATTACK_POWER) {
-              // 체력 감소, 플레이어는 현재 위치 유지
-              currentMap[newPlayerY + 1][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
-              console.log(`[Falling Logic] Mineral health reduced to: ${currentMap[newPlayerY + 1][newPlayerX]?.health}`);
-            } else {
-              // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
-              currentMap[newPlayerY + 1][newPlayerX] = null;
-              newPlayerY++; // 파괴된 빈 공간으로 낙하
-              movedDownThisTick = true; // 낙하 발생
-              console.log(`[Falling Logic] Mineral broken, player fell to Y: ${newPlayerY}`);
-              // 고구마 타일 파괴 시 체력 회복
-              if (mineralTile.type === 'sweetpotato') {
-                setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+              if (tileBelowCurrentPos === null) {
+                  // 아래가 비어있으면 한 칸 낙하
+                  newPlayerY++;
+                  movedDownThisTick = true;
+                  console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (empty space)`);
+              } else if (tileBelowCurrentPos.type === 'lava') {
+                  // 아래가 용암이면 한 칸 낙하 (피해는 이후 로직에서 처리)
+                  newPlayerY++;
+                  movedDownThisTick = true;
+                  console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (lava)`);
+              } else if (tileBelowCurrentPos.type === 'bomb') {
+                  // 폭탄 위에서는 멈춤.
+                  console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${newPlayerY + 1})`);
+              } else { // 나머지 경우는 MineralTileObject여야 함
+                  const mineralTile = tileBelowCurrentPos as MineralTileObject; // 여기서 안전하게 타입 단언
+                  console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}`);
+                  if (mineralTile.health > DRILL_ATTACK_POWER) {
+                      // 체력 감소, 플레이어는 현재 위치 유지
+                      currentMap[newPlayerY + 1][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
+                      console.log(`[Falling Logic] Mineral health reduced to: ${currentMap[newPlayerY + 1][newPlayerX]?.health}`);
+                  } else {
+                      // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
+                      currentMap[newPlayerY + 1][newPlayerX] = null;
+                      newPlayerY++; // 파괴된 빈 공간으로 낙하
+                      movedDownThisTick = true; // 낙하 발생
+                      console.log(`[Falling Logic] Mineral broken, player fell to Y: ${newPlayerY}`);
+                      // 고구마 타일 파괴 시 체력 회복
+                      if (mineralTile.type === 'sweetpotato') {
+                          setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+                      }
+                      // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
+                      setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
+                  }
               }
-              // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
-              setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
-            }
-          } else if (newPlayerY + 1 < currentMap.length && typeof tileBelowCurrentPos === 'object' && tileBelowCurrentPos.type === 'bomb') {
-            // 폭탄 위에서는 멈춤.
-            console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${newPlayerY + 1})`);
-          } else if (newPlayerY + 1 >= currentMap.length) {
+          } else {
             // 맵의 가장 아래에 도달한 경우 (더 이상 아래로 갈 수 없음)
             console.log(`[Falling Logic] Reached bottom of the map.`);
           }
@@ -432,7 +433,7 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH]); // MINERAL_HEALTH 의존성 추가
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH]);
 
   // 레벨업 처리 useEffect (currentXP 또는 xpToNextLevel이 변경될 때마다 실행)
   useEffect(() => {
@@ -484,14 +485,23 @@ export default function App() {
       if (direction === "left") targetX = Math.max(0, x - 1);
       else if (direction === "right") targetX = Math.min(MAP_WIDTH - 1, x + 1);
 
-      // 이동하려는 위치에 타일이 있는지 확인
-      const tileAtTarget = currentMap[y]?.[targetX];
-
       let playerMoved = false;
 
-      if (tileAtTarget !== undefined && tileAtTarget !== null) { // 타일이 존재하면
-        if (typeof tileAtTarget === 'object' && tileAtTarget.type !== 'bomb' && tileAtTarget.type !== 'lava') { // 광물 타일인 경우
-          const mineralTile = tileAtTarget as MineralTileObject;
+      // 목표 X 위치가 유효한 맵 범위 내에 있는지 먼저 확인
+      if (targetX >= 0 && targetX < MAP_WIDTH) {
+        const tileAtTarget = currentMap[y]?.[targetX];
+
+        if (tileAtTarget === null || tileAtTarget === undefined) { // 목표 위치가 비어있는 공간 (null)인 경우
+          playerMoved = true;
+        } else if (tileAtTarget.type === 'lava') { // 용암 타일인 경우
+          playerMoved = true; // 용암 위로는 공격 없이 이동 가능
+        } else if (tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
+          if (tileAtTarget.countdown === null) {
+            currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
+          }
+          // 플레이어는 폭탄 위로 이동하지 않음
+        } else { // 나머지 경우는 MineralTileObject여야 함
+          const mineralTile = tileAtTarget as MineralTileObject; // 여기서 안전하게 타입 단언
           if (mineralTile.health > DRILL_ATTACK_POWER) {
             // 체력 감소, 플레이어는 현재 위치 유지
             currentMap[y][targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
@@ -506,25 +516,15 @@ export default function App() {
             // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
             setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
           }
-        } else if (typeof tileAtTarget === 'object' && tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
-          // 폭탄 타일인 경우, 비활성 상태면 활성화
-          if (tileAtTarget.countdown === null) {
-            currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
-          }
-          // 활성 상태면 그대로 둠 (터치해도 바로 터지지 않음)
-          // 폭탄 타일 위로 이동하지 않음
-        } else if (typeof tileAtTarget === 'object' && tileAtTarget.type === 'lava') { // 용암 타일인 경우 (NEW)
-            playerMoved = true; // 용암 위로는 공격 없이 이동 가능
         }
-      } else { // 목표 위치가 비어있는 공간 (null)인 경우
-        playerMoved = true;
-      }
+      } // else (targetX가 맵 범위를 벗어난 경우) playerMoved는 false로 유지
 
       if (playerMoved) {
         setPosition({ x: targetX, y: y });
         console.log(`!!! SETTING POSITION (Horizontal Move): (${targetX}, ${y})`);
         // 용암 타일 진입 시 피해 적용 (좌우 이동 시)
-        const tileAtNewPosition = currentMap[y]?.[targetX];
+        // 이동 후에 다시 해당 위치의 타일을 확인해야 정확한 상태를 반영함
+        const tileAtNewPosition = currentMap[y]?.[targetX]; 
         if (tileAtNewPosition && typeof tileAtNewPosition === 'object' && tileAtNewPosition.type === 'lava') {
             if (!onLava) { // 용암에 새로 진입했을 때만
                 setCurrentHealth(prev => Math.max(0, prev - 1));
@@ -541,7 +541,7 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava, MINERAL_HEALTH]); // MINERAL_HEALTH 의존성 추가
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava, MINERAL_HEALTH]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 키보드 입력 무시
