@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
-  const canvasRef = useRef<HTMLHTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null); // 'HTMLHTMLCanvasElement' -> 'HTMLCanvasElement' 수정
   const [position, setPosition] = useState({ x: 5, y: 0 }); // 꼬순이의 논리적(절대) Y 위치
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
@@ -142,11 +142,8 @@ export default function App() {
   const MAP_WIDTH = 15; // 맵의 가로 타일 개수 (10 -> 15로 변경: 좌우 빈 공간 감소 목적)
   const MAP_HEIGHT = 20; // 화면에 보이는 맵의 세로 타일 개수
 
-  // 타일 종류별 색상 정의 (이제는 이미지를 사용할 것이므로, 사용하지 않는 색상 정의는 삭제)
-  const tileColors: Record<string, string> = {
-    // dirt, copper, silver, gold, diamond는 이제 이미지로 그릴 것이므로 여기서 색상 정의는 사용하지 않음
-    // 필요하다면 다른 타일 색상을 정의할 수 있음
-  };
+  // 타일 종류별 색상 정의 (더 이상 사용되지 않으므로 삭제)
+  // const tileColors: Record<string, string> = {}; 
 
   const BOMB_INITIAL_COUNTDOWN = 3; // 폭탄 초기 카운트다운 시간 (초)
   const BOMB_EXPLOSION_RADIUS = 2; // 폭탄 폭발 시 제거되는 타일 범위 (2: 5x5 영역)
@@ -339,29 +336,34 @@ export default function App() {
 
           // 낙하 로직 개선: 매 틱마다 한 칸씩 떨어지거나, 블록과 상호작용
           const nextY = newPlayerY + 1;
-          let hasMovedThisTick = false; // 수평 또는 수직 이동이 있었는지 확인
+          let movedDownThisTick = false; // 수직 이동이 있었는지 확인
 
-          if (nextY < currentMap.length) {
+          if (nextY < currentMap.length) { // 맵 범위를 벗어나지 않는지 확인
             const tileBelow = currentMap[nextY]?.[newPlayerX];
             console.log(`Falling Check: Player newY=${newPlayerY}, Tile below (${newPlayerX}, ${nextY}):`, tileBelow);
 
-            if (tileBelow === null || (typeof tileBelow === 'object' && tileBelow.type === 'lava')) {
-              // 아래가 비어있거나 용암이면 한 칸 낙하
+            if (tileBelow === null) {
+              // 아래가 비어있으면 한 칸 낙하
               newPlayerY++;
-              hasMovedThisTick = true;
-              console.log(`Player fell to Y: ${newPlayerY}`);
-            } else if (typeof tileBelow === 'object' && tileBelow.type !== 'bomb') { // 광물 타일인 경우
+              movedDownThisTick = true;
+              console.log(`Player fell to Y: ${newPlayerY} (empty space)`);
+            } else if (typeof tileBelow === 'object' && tileBelow.type === 'lava') {
+                // 아래가 용암이면 한 칸 낙하 (피해는 이후 로직에서 처리)
+                newPlayerY++;
+                movedDownThisTick = true;
+                console.log(`Player fell to Y: ${newPlayerY} (lava)`);
+            }
+            else if (typeof tileBelow === 'object' && tileBelow.type !== 'bomb') { // 광물 타일인 경우
               const mineralTile = tileBelow as MineralTileObject;
               console.log(`Hitting mineral at (${newPlayerX}, ${nextY}) with health: ${mineralTile.health}`);
               if (mineralTile.health > DRILL_ATTACK_POWER) {
                 // 체력 감소, 플레이어는 현재 위치 유지
                 currentMap[nextY][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
-                // 이 경우 플레이어는 낙하하지 않으므로 hasMovedThisTick은 변경 없음
               } else {
                 // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                 currentMap[nextY][newPlayerX] = null;
                 newPlayerY++; // 파괴된 빈 공간으로 낙하
-                hasMovedThisTick = true; // 낙하 발생
+                movedDownThisTick = true; // 낙하 발생
                 console.log(`Mineral broken, player fell to Y: ${newPlayerY}`);
                 // 고구마 타일 파괴 시 체력 회복
                 if (mineralTile.type === 'sweetpotato') {
@@ -373,7 +375,6 @@ export default function App() {
             } else if (typeof tileBelow === 'object' && tileBelow.type === 'bomb') {
               // 폭탄 위에서는 멈춤. 폭탄은 독립적으로 카운트다운 진행.
               console.log(`Landed on bomb at (${newPlayerX}, ${nextY})`);
-              // 낙하하지 않으므로 hasMovedThisTick 변경 없음
             }
           }
           // 맵의 가장 아래에 도달했거나, 아래에 타일이 없으면 더 이상 낙하하지 않음.
@@ -386,8 +387,8 @@ export default function App() {
           }
 
           // 플레이어 위치가 변경되었거나, 이번 틱에 수직 이동이 발생했을 경우에만 상태 업데이트
-          console.log(`Pre-setPosition check: newPlayerX=${newPlayerX}, position.x=${position.x}, newPlayerY=${newPlayerY}, position.y=${position.y}, hasMovedThisTick=${hasMovedThisTick}`);
-          if (newPlayerX !== position.x || newPlayerY !== position.y || hasMovedThisTick) {
+          console.log(`Pre-setPosition check: newPlayerX=${newPlayerX}, position.x=${position.x}, newPlayerY=${newPlayerY}, position.y=${position.y}, movedDownThisTick=${movedDownThisTick}`);
+          if (newPlayerX !== position.x || newPlayerY !== position.y || movedDownThisTick) { // movedDownThisTick을 조건에 포함
             setPosition({ x: newPlayerX, y: newPlayerY });
             console.log(`!!! SETTING POSITION: (${newPlayerX}, ${newPlayerY})`);
 
