@@ -307,16 +307,6 @@ export default function App() {
           console.log(`Initial Player Position: (${position.x}, ${position.y})`);
           console.log(`Tile at Player Pos: (${position.x}, ${position.y}) is `, currentMap[position.y]?.[position.x]);
           
-          const tileBelowExists = newPlayerY + 1 < currentMap.length;
-          let tileBelowCurrentPos: MapTile | undefined = undefined;
-
-          if (tileBelowExists) {
-              tileBelowCurrentPos = currentMap[newPlayerY + 1][newPlayerX];
-              console.log(`Tile below Player at (${newPlayerX}, ${newPlayerY + 1}) is `, tileBelowCurrentPos);
-          } else {
-              console.log(`No tile below Player (reached bottom of map or map boundary issue)`);
-          }
-
 
           let bombsToExplode: { x: number; y: number; }[] = [];
           for (let y = 0; y < currentMap.length; y++) {
@@ -352,7 +342,9 @@ export default function App() {
           let movedDownThisTick = false; // 수직 이동이 있었는지 확인
 
           // 다음 Y 위치가 맵 범위를 벗어나지 않는지 먼저 확인
-          if (tileBelowExists) { // Only proceed if tile below exists
+          if (newPlayerY + 1 < currentMap.length) {
+              const tileBelowCurrentPos: MapTile = currentMap[newPlayerY + 1][newPlayerX];
+
               if (tileBelowCurrentPos === null) {
                   // 아래가 비어있으면 한 칸 낙하
                   newPlayerY++;
@@ -503,32 +495,35 @@ export default function App() {
 
       // 목표 X 위치가 유효한 맵 범위 내에 있는지 먼저 확인
       if (targetX >= 0 && targetX < MAP_WIDTH) {
-        const tileAtTarget = currentMap[y]?.[targetX];
+        const currentRow = currentMap[y];
+        if (currentRow) { // 현재 플레이어 Y 위치의 행이 존재하는지 확인
+          const tileAtTarget: MapTile = currentRow[targetX]; // 타입 단언 없이 안전하게 MapTile로 할당
 
-        if (tileAtTarget === null || tileAtTarget === undefined) { // 목표 위치가 비어있는 공간 (null)인 경우
-          playerMoved = true;
-        } else if (tileAtTarget.type === 'lava') { // 용암 타일인 경우
-          playerMoved = true; // 용암 위로는 공격 없이 이동 가능
-        } else if (tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
-          if (tileAtTarget.countdown === null) {
-            currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
-          }
-          // 플레이어는 폭탄 위로 이동하지 않음
-        } else if (isMineralTile(tileAtTarget)) { // 사용자 정의 타입 가드 사용
-          const mineralTile = tileAtTarget; // 이제 TypeScript가 MineralTileObject임을 앎
-          if (mineralTile.health > DRILL_ATTACK_POWER) {
-            // 체력 감소, 플레이어는 현재 위치 유지
-            currentMap[y][targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
-          } else {
-            // 체력이 0 이하가 되면 타일 파괴, 플레이어 이동
-            currentMap[y][targetX] = null;
+          if (tileAtTarget === null) { // 목표 위치가 비어있는 공간 (null)인 경우
             playerMoved = true;
-            // 고구마 타일 파괴 시 체력 회복
-            if (mineralTile.type === 'sweetpotato') {
-              setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+          } else if (tileAtTarget.type === 'lava') { // 용암 타일인 경우
+            playerMoved = true; // 용암 위로는 공격 없이 이동 가능
+          } else if (tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
+            if (tileAtTarget.countdown === null) {
+              currentRow[targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
             }
-            // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
-            setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
+            // 플레이어는 폭탄 위로 이동하지 않음
+          } else if (isMineralTile(tileAtTarget)) { // 사용자 정의 타입 가드 사용
+            const mineralTile = tileAtTarget; // 이제 TypeScript가 MineralTileObject임을 앎
+            if (mineralTile.health > DRILL_ATTACK_POWER) {
+              // 체력 감소, 플레이어는 현재 위치 유지
+              currentRow[targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
+            } else {
+              // 체력이 0 이하가 되면 타일 파괴, 플레이어 이동
+              currentRow[targetX] = null;
+              playerMoved = true;
+              // 고구마 타일 파괴 시 체력 회복
+              if (mineralTile.type === 'sweetpotato') {
+                setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
+              }
+              // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
+              setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
+            }
           }
         }
       } // else (targetX가 맵 범위를 벗어난 경우) playerMoved는 false로 유지
