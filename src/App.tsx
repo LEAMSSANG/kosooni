@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gameContainerRef = useRef<HTMLDivElement>(null); // 게임 컨테이너 Div Ref 추가
   const [position, setPosition] = useState({ x: 5, y: 1 }); // 꼬순이의 논리적(절대) Y 위치를 0 -> 1로 수정하여 둘째 줄에서 시작
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
@@ -307,11 +306,18 @@ export default function App() {
 
   // 게임 틱 로직 (낙하, 폭탄, 경험치 획득 등)
   useEffect(() => {
-    if (!imagesLoaded || gamePhase !== 'game') return;
+    if (!imagesLoaded || gamePhase !== 'game') {
+      console.log(`Game tick useEffect: Not active. imagesLoaded: ${imagesLoaded}, gamePhase: ${gamePhase}`);
+      return;
+    }
+
+    console.log("Game tick useEffect started. Current game phase:", gamePhase);
 
     const gameInterval = setInterval(() => {
+      console.log("Game tick running. Current position:", position.x, position.y);
+
       // 공격 애니메이션 중이 아니면 일반적인 낙하/움직임 바운스 적용
-      if (!isAttacking) { // isAttacking이 아닐 때만 미세 낙하 애니메이션 적용
+      if (!isAttacking) {
         setOffsetY(-5); 
         setTimeout(() => {
           setOffsetY(0);
@@ -353,37 +359,43 @@ export default function App() {
           let movedDownThisTick = false;
           const nextPlayerYCandidate = newPlayerY + 1;
 
+          console.log(`[Falling Check] PlayerY: ${newPlayerY}, NextYCandidate: ${nextPlayerYCandidate}`);
           if (nextPlayerYCandidate < currentMap.length) {
               const tileBelowCurrentPos = currentMap[nextPlayerYCandidate][newPlayerX];
+              console.log(`[Falling Check] Tile below (${newPlayerX}, ${nextPlayerYCandidate}):`, tileBelowCurrentPos);
 
               if (tileBelowCurrentPos === null) {
                   newPlayerY++;
                   movedDownThisTick = true;
+                  console.log(`[Falling Result] Fell to Y: ${newPlayerY} (empty space)`);
               } else if (tileBelowCurrentPos === undefined) {
                   console.warn(`[Falling Logic] Tile below is unexpectedly undefined at [${nextPlayerYCandidate}][${newPlayerX}]. This suggests a map indexing problem.`);
               } else if (tileBelowCurrentPos.type === 'lava') {
                   newPlayerY++;
                   movedDownThisTick = true;
+                  console.log(`[Falling Result] Fell to Y: ${newPlayerY} (lava)`);
               } else if (tileBelowCurrentPos.type === 'bomb') {
+                  console.log(`[Falling Result] Landed on bomb at (${newPlayerX}, ${nextPlayerYCandidate})`);
                   // 폭탄 위에서는 멈춤
               } else if (isMineralTile(tileBelowCurrentPos)) {
                   const mineralTile = tileBelowCurrentPos;
-                  // 공격은 movePlayer에서 처리되므로, 여기서 직접 타일을 파괴하지 않고 낙하만 멈춥니다.
-                  // 다만, 드릴 파워가 적용되는 로직은 이곳에 있어야 함.
-                  // 이 로직은 캐릭터가 '아래'로 이동하려 할 때 아래 타일을 파괴하는 로직입니다.
-                  // 좌우 이동 시 공격은 movePlayer에서 처리됩니다.
+                  console.log(`[Falling Result] Hitting mineral at (${newPlayerX}, ${nextPlayerYCandidate}) with health: ${mineralTile.health}, drill power: ${DRILL_ATTACK_POWER}`);
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
                       currentMap[nextPlayerYCandidate][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
+                      console.log(`[Falling Result] Mineral health reduced to: ${mineralTile.health - DRILL_ATTACK_POWER}. Player stays.`);
                   } else {
                       currentMap[nextPlayerYCandidate][newPlayerX] = null;
                       newPlayerY++;
                       movedDownThisTick = true;
+                      console.log(`[Falling Result] Mineral broken (was health ${mineralTile.health}), player fell to Y: ${newPlayerY}`);
                       if (mineralTile.type === 'sweetpotato') {
                           setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
                       }
                       setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
                   }
               }
+          } else {
+              console.log(`[Falling Check] Player is at the bottom edge (or beyond) of the current map segment. Max map Y: ${currentMap.length - 1}`);
           }
 
           const MAP_GENERATE_THRESHOLD = currentMap.length - MAP_HEIGHT;
@@ -392,6 +404,7 @@ export default function App() {
           }
 
           if (newPlayerX !== position.x || newPlayerY !== position.y || movedDownThisTick) {
+            console.log(`[Position Update] Updating position from (${position.x}, ${position.y}) to (${newPlayerX}, ${newPlayerY}). Moved Down: ${movedDownThisTick}`);
             setPosition({ x: newPlayerX, y: newPlayerY });
 
             if (newPlayerY >= SCROLL_THRESHOLD_Y) {
@@ -412,6 +425,7 @@ export default function App() {
                 }
             }
           } else {
+            console.log(`[Position Update] Position remained (${position.x}, ${position.y}). No move.`);
             const tileAtCurrentPos = currentMap[position.y]?.[position.x];
             if (!(tileAtCurrentPos && typeof tileAtCurrentPos === 'object' && tileAtCurrentPos.type === 'lava')) {
                 if (onLava) {
@@ -427,8 +441,8 @@ export default function App() {
   }, [
     position, explodeBomb, generateNewRow, DRILL_ATTACK_POWER,
     imagesLoaded, gamePhase, onLava, isMineralTile, isAttacking,
-    JUMP_OFFSET_DURATION, SCROLL_THRESHOLD_Y, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
-    BOMB_INITIAL_COUNTDOWN, PLAYER_MAX_HEALTH, MINERAL_HEALTH
+    JUMP_OFFSET_DURATION, SCROLL_THRESHOLD_Y, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, // Constants added for full context, not strictly necessary for dependency re-run
+    BOMB_INITIAL_COUNTDOWN, PLAYER_MAX_HEALTH, MINERAL_HEALTH // Constants added for full context
   ]);
 
 
@@ -763,10 +777,10 @@ export default function App() {
     };
   }, [handleKeyDown, gamePhase]); 
 
-  // 모바일 터치 이벤트 핸들러 (e: React.TouchEvent<HTMLDivElement> -> e: TouchEvent 로 변경)
-  const handleTouchMove = useCallback((e: TouchEvent) => {
+  // 모바일 터치 이벤트 핸들러 (React.TouchEvent로 롤백)
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 터치 이동 무시
-    e.preventDefault(); // 기본 스크롤 방지 (이제 passive: false와 함께 작동)
+    // e.preventDefault(); // 기본 스크롤 방지 -> 필요시 주석 해제 (단, passive listener 오류에 주의)
     const touchX = e.touches[0].clientX; // 첫 번째 터치의 X 좌표
     const screenWidth = window.innerWidth;
 
@@ -777,44 +791,25 @@ export default function App() {
     }
   }, [movePlayer, gamePhase]);
 
-  // 터치 시작 시 기본 동작 방지를 위한 새로운 핸들러
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (gamePhase !== 'game') return;
-    e.preventDefault(); // 초기 터치 시 스크롤/확대 방지
-  }, [gamePhase]);
-
-  // 네이티브 터치 이벤트 리스너 등록 및 해제
-  useEffect(() => {
-    const container = gameContainerRef.current;
-    if (!container) return;
-
-    // passive: false 옵션으로 preventDefault() 호출 가능하게 설정
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-    };
-  }, [handleTouchStart, handleTouchMove, gamePhase]); // 의존성 배열에 새로 추가된 핸들러 및 gamePhase 포함
-
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
     if (imagesLoaded) { // 이미지가 모두 로드된 후에만 전환
+      console.log('Story complete, setting gamePhase to "story".');
       setGamePhase('story');
     }
   }, [imagesLoaded]);
 
   // 스토리 화면 완료 핸들러
   const handleStoryComplete = useCallback(() => {
+    console.log('Story complete, setting gamePhase to "game".');
     setGamePhase('game');
   }, []);
 
   return (
     <div
-      ref={gameContainerRef} // Ref 적용
       className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative overflow-hidden" 
-      // onTouchStart 및 onTouchMove JSX 속성은 제거. useEffect에서 네이티브 리스너로 처리.
+      onTouchStart={gamePhase === 'game' ? handleTouchMove : undefined} 
+      onTouchMove={gamePhase === 'game' ? handleTouchMove : undefined} 
     >
       {/* 오프닝 화면 */}
       {gamePhase === 'opening' && (
@@ -890,7 +885,7 @@ export default function App() {
             // 캔버스 내부 해상도를 게임 월드 크기에 고정
             width={TILE_SIZE * MAP_WIDTH}  // 600px
             height={TILE_SIZE * MAP_HEIGHT} // 800px
-            // CSS로 캔버스가 부모 컨테이너에 맞춰 스케일되도록 설정
+            // CSS로 캔버스 스케일되도록 설정
             style={{ 
               display: 'block', 
               maxWidth: '100%', 
