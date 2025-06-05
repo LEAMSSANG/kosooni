@@ -802,6 +802,7 @@ export default function App() {
         const messageY = kosooniDisplayY + offsetY - TILE_SIZE; // 꼬순이 타일 위쪽으로
         context.fillText(levelUpMessage, position.x * TILE_SIZE + TILE_SIZE / 2, messageY);
       }
+      console.log('--- Drawing Loop End ---');
     };
 
     draw();
@@ -819,6 +820,9 @@ export default function App() {
         // 실제 렌더링된 CSS 크기를 가져와 내부 드로잉 버퍼 해상도 설정
         const canvasCssWidth = canvas.clientWidth;
         const canvasCssHeight = canvas.clientHeight;
+
+        console.log(`[Resize Effect] clientWidth=${canvasCssWidth}, clientHeight=${canvasCssHeight}`);
+        console.log(`[Resize Effect] Setting canvas.width=${canvasCssWidth}, canvas.height=${canvasCssHeight}`);
 
         canvas.width = canvasCssWidth;
         canvas.height = canvasCssHeight;
