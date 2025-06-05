@@ -365,7 +365,8 @@ export default function App() {
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
                       // 체력 감소, 플레이어는 현재 위치 유지
                       currentMap[newPlayerY + 1][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
-                      console.log(`[Falling Logic] Mineral health reduced to: ${currentMap[newPlayerY + 1][newPlayerX]?.health}`);
+                      // 이 로그에서 업데이트된 맵의 요소를 다시 참조하는 대신 mineralTile 변수를 사용
+                      console.log(`[Falling Logic] Mineral health reduced to: ${mineralTile.health - DRILL_ATTACK_POWER}`);
                   } else {
                       // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                       currentMap[newPlayerY + 1][newPlayerX] = null;
