@@ -564,12 +564,21 @@ export default function App() {
 
   // Canvas 그리기 로직
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+    // 이 useEffect가 호출되는 시점의 gamePhase와 imagesLoaded 상태를 기록
+    console.log(`[Drawing useEffect Init] Current gamePhase: ${gamePhase}, imagesLoaded: ${imagesLoaded}`);
 
-    // 이미지가 로드되지 않았거나 게임 단계가 아니면 로딩 메시지 또는 빈 화면 표시
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      console.warn('[Drawing useEffect Init] Canvas ref is null or undefined.');
+      return;
+    }
+    const context = canvas.getContext("2d");
+    if (!context) {
+      console.warn('[Drawing useEffect Init] Canvas context is null or undefined.');
+      return;
+    }
+
+    // 이미지가 로드되지 않았으면 로딩 메시지 표시 후 바로 종료
     if (!imagesLoaded) {
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = "#000"; // 검은색 배경
@@ -578,16 +587,20 @@ export default function App() {
       context.font = "20px Arial";
       context.textAlign = "center";
       context.textBaseline = "middle";
-      // 로딩 진행 상황을 표시
       context.fillText(`로딩 중... (${loadedImageCount}/${totalImagesToLoad})`, canvas.width / 2, canvas.height / 2);
+      console.log(`[Drawing useEffect Init] Images not loaded, displaying loading message.`);
       return;
     }
 
-    // 게임 단계가 아니면 캔버스 내용 지우기
+    // 게임 단계가 'game'이 아니면 캔버스 내용 지우고 바로 종료
     if (gamePhase !== 'game') {
       context.clearRect(0, 0, canvas.width, canvas.height);
+      console.log(`[Drawing useEffect Init] Not in 'game' phase, clearing canvas.`);
       return;
     }
+
+    // --- 여기까지 도달했다면 캔버스에 그릴 준비가 된 것입니다 ---
+    console.log(`[Drawing useEffect Init] Ready to draw game content.`);
 
     // 캔버스 크기 조정 로직: CSS 크기를 기반으로 내부 해상도 설정
     const parentDiv = canvas.parentElement;
@@ -623,10 +636,11 @@ export default function App() {
     
     const draw = () => {
       // 디버깅을 위한 로그 추가
-      console.log('--- Drawing Loop Start ---');
+      console.log('--- Drawing Loop Start (Inside draw function) ---');
       console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
       console.log(`Scale: ${scale}, OffsetX: ${offsetX}, OffsetY_draw: ${offsetY_draw}`);
       console.log(`Player position: (${position.x}, ${position.y})`);
+      const startDrawY = Math.floor(scrollOffset / TILE_SIZE); // draw 함수 내부에서 정의
       console.log(`ScrollOffset: ${scrollOffset}, StartDrawY: ${startDrawY}`);
       console.log(`Current gamePhase: ${gamePhase}, imagesLoaded: ${imagesLoaded}`);
       console.log('TileMap sample (first 2 rows):', tileMap.slice(0, 2));
@@ -641,7 +655,6 @@ export default function App() {
       context.scale(scale, scale); // 스케일 적용
 
       // 맵 그리기 (스크롤 오프셋 적용)
-      const startDrawY = Math.floor(scrollOffset / TILE_SIZE);
       for (let y = 0; y < MAP_HEIGHT; y++) {
         for (let x = 0; x < MAP_WIDTH; x++) {
           const actualMapY = startDrawY + y;
@@ -802,7 +815,7 @@ export default function App() {
         const messageY = kosooniDisplayY + offsetY - TILE_SIZE; // 꼬순이 타일 위쪽으로
         context.fillText(levelUpMessage, position.x * TILE_SIZE + TILE_SIZE / 2, messageY);
       }
-      console.log('--- Drawing Loop End ---');
+      console.log('--- Drawing Loop End (Inside draw function) ---');
     };
 
     draw();
@@ -855,12 +868,14 @@ export default function App() {
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
     if (imagesLoaded) { // 이미지가 모두 로드된 후에만 전환
+      console.log('handleOpeningClick called. Setting gamePhase to "story".');
       setGamePhase('story');
     }
   }, [imagesLoaded]);
 
   // 스토리 화면 완료 핸들러
   const handleStoryComplete = useCallback(() => {
+    console.log('handleStoryComplete called. Setting gamePhase to "game".');
     setGamePhase('game');
   }, []);
 
