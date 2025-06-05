@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gameContainerRef = useRef<HTMLDivElement>(null); // 게임 컨테이너 Div Ref 추가
   const [position, setPosition] = useState({ x: 5, y: 1 }); // 꼬순이의 논리적(절대) Y 위치를 0 -> 1로 수정하여 둘째 줄에서 시작
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
@@ -200,7 +201,6 @@ export default function App() {
       }
       row.push(tile);
     }
-    console.log("Generated new row:", row.map(t => t ? `${t.type}(${'health' in t ? t.health : ''})` : 'null').join(', ')); // Added log
     return row;
   }, [MAP_WIDTH]);
 
@@ -311,7 +311,6 @@ export default function App() {
 
     const gameInterval = setInterval(() => {
       // 공격 애니메이션 중이 아니면 일반적인 낙하/움직임 바운스 적용
-      // 이 부분은 isAttacking useEffect에서 처리되므로, 여기서는 기본 낙하/이동만 고려
       if (!isAttacking) { // isAttacking이 아닐 때만 미세 낙하 애니메이션 적용
         setOffsetY(-5); 
         setTimeout(() => {
@@ -764,10 +763,10 @@ export default function App() {
     };
   }, [handleKeyDown, gamePhase]); 
 
-  // 모바일 터치 이벤트 핸들러 (전체 화면 터치 유지)
-  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+  // 모바일 터치 이벤트 핸들러 (e: React.TouchEvent<HTMLDivElement> -> e: TouchEvent 로 변경)
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 터치 이동 무시
-    e.preventDefault(); // 기본 스크롤 방지
+    e.preventDefault(); // 기본 스크롤 방지 (이제 passive: false와 함께 작동)
     const touchX = e.touches[0].clientX; // 첫 번째 터치의 X 좌표
     const screenWidth = window.innerWidth;
 
@@ -777,6 +776,27 @@ export default function App() {
       movePlayer("right"); // 화면 우측 터치 시 우측 이동
     }
   }, [movePlayer, gamePhase]);
+
+  // 터치 시작 시 기본 동작 방지를 위한 새로운 핸들러
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (gamePhase !== 'game') return;
+    e.preventDefault(); // 초기 터치 시 스크롤/확대 방지
+  }, [gamePhase]);
+
+  // 네이티브 터치 이벤트 리스너 등록 및 해제
+  useEffect(() => {
+    const container = gameContainerRef.current;
+    if (!container) return;
+
+    // passive: false 옵션으로 preventDefault() 호출 가능하게 설정
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [handleTouchStart, handleTouchMove, gamePhase]); // 의존성 배열에 새로 추가된 핸들러 및 gamePhase 포함
 
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
@@ -792,9 +812,9 @@ export default function App() {
 
   return (
     <div
+      ref={gameContainerRef} // Ref 적용
       className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative overflow-hidden" 
-      onTouchStart={gamePhase === 'game' ? handleTouchMove : undefined}
-      onTouchMove={gamePhase === 'game' ? handleTouchMove : undefined}
+      // onTouchStart 및 onTouchMove JSX 속성은 제거. useEffect에서 네이티브 리스너로 처리.
     >
       {/* 오프닝 화면 */}
       {gamePhase === 'opening' && (
