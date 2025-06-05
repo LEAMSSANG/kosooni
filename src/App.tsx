@@ -199,19 +199,21 @@ export default function App() {
       }
       row.push(tile);
     }
+    console.log("Generated new row:", row.map(t => t ? `${t.type}(${'health' in t ? t.health : ''})` : 'null').join(', ')); // Added log
     return row;
   }, [MAP_WIDTH]);
 
   // 초기 맵 생성 함수
   const generateInitialMap = useCallback(() => {
     const map: MapTile[][] = [];
-    // 초기 맵은 화면 높이의 2배 정도로 생성하여 시작 시 충분한 공간 제공
-    for (let y = 0; y < MAP_HEIGHT * 2; y++) {
-      map.push(generateNewRow());
+    // 플레이어가 처음 몇 칸은 자유롭게 낙하할 수 있도록, 초기 4줄을 비워둠
+    for (let y = 0; y < 4; y++) { 
+        map.push(Array(MAP_WIDTH).fill(null));
     }
-    // 플레이어 시작 위치의 상단 두 줄은 비워둠 (y=0, y=1)
-    map[0] = Array(MAP_WIDTH).fill(null);
-    map[1] = Array(MAP_WIDTH).fill(null);
+    // 그 다음부터 무작위 광물 행 생성
+    for (let y = 4; y < MAP_HEIGHT * 2; y++) {
+        map.push(generateNewRow());
+    }
     return map;
   }, [MAP_HEIGHT, MAP_WIDTH, generateNewRow]);
 
@@ -301,11 +303,18 @@ export default function App() {
           let newPlayerY = position.y; // 현재 꼬순이 Y 위치에서 시작
 
           // Debugging: Log initial player position and surrounding tiles
-          console.log(`--- Game Tick Start ---`);
+          console.log(`--- Game Tick Start (Y: ${position.y}) ---`); // Add Y to start log
           console.log(`Initial Player Position: (${position.x}, ${position.y})`);
           console.log(`Tile at Player Pos: (${position.x}, ${position.y}) is `, currentMap[position.y]?.[position.x]);
-          if (position.y + 1 < currentMap.length) {
-              console.log(`Tile below Player (at current position + 1): (${position.x}, ${position.y + 1}) is `, currentMap[position.y + 1]?.[position.x]);
+          
+          const tileBelowExists = newPlayerY + 1 < currentMap.length;
+          let tileBelowCurrentPos: MapTile | undefined = undefined;
+
+          if (tileBelowExists) {
+              tileBelowCurrentPos = currentMap[newPlayerY + 1][newPlayerX];
+              console.log(`Tile below Player at (${newPlayerX}, ${newPlayerY + 1}) is `, tileBelowCurrentPos);
+          } else {
+              console.log(`No tile below Player (reached bottom of map or map boundary issue)`);
           }
 
 
@@ -343,9 +352,7 @@ export default function App() {
           let movedDownThisTick = false; // 수직 이동이 있었는지 확인
 
           // 다음 Y 위치가 맵 범위를 벗어나지 않는지 먼저 확인
-          if (newPlayerY + 1 < currentMap.length) {
-              const tileBelowCurrentPos = currentMap[newPlayerY + 1][newPlayerX]; // 이미 범위 체크했으므로 `?` 제거 가능
-
+          if (tileBelowExists) { // Only proceed if tile below exists
               if (tileBelowCurrentPos === null) {
                   // 아래가 비어있으면 한 칸 낙하
                   newPlayerY++;
@@ -361,18 +368,18 @@ export default function App() {
                   console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${newPlayerY + 1})`);
               } else if (isMineralTile(tileBelowCurrentPos)) { // 사용자 정의 타입 가드 사용
                   const mineralTile = tileBelowCurrentPos; // 이제 TypeScript가 MineralTileObject임을 앎
-                  console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}`);
+                  console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}, drill power: ${DRILL_ATTACK_POWER}`); // Log drill power
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
                       // 체력 감소, 플레이어는 현재 위치 유지
                       currentMap[newPlayerY + 1][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
                       // 이 로그에서 업데이트된 맵의 요소를 다시 참조하는 대신 mineralTile 변수를 사용
-                      console.log(`[Falling Logic] Mineral health reduced to: ${mineralTile.health - DRILL_ATTACK_POWER}`);
+                      console.log(`[Falling Logic] Mineral health reduced to: ${mineralTile.health - DRILL_ATTACK_POWER}. Player stays.`);
                   } else {
                       // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                       currentMap[newPlayerY + 1][newPlayerX] = null;
                       newPlayerY++; // 파괴된 빈 공간으로 낙하
                       movedDownThisTick = true; // 낙하 발생
-                      console.log(`[Falling Logic] Mineral broken, player fell to Y: ${newPlayerY}`);
+                      console.log(`[Falling Logic] Mineral broken (was health ${mineralTile.health}), player fell to Y: ${newPlayerY}`);
                       // 고구마 타일 파괴 시 체력 회복
                       if (mineralTile.type === 'sweetpotato') {
                           setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
@@ -382,8 +389,8 @@ export default function App() {
                   }
               }
           } else {
-            // 맵의 가장 아래에 도달한 경우 (더 이상 아래로 갈 수 없음)
-            console.log(`[Falling Logic] Reached bottom of the map.`);
+              // 맵의 가장 아래에 도달한 경우 (더 이상 아래로 갈 수 없음)
+              console.log(`[Falling Logic] Player is at the bottom edge (or beyond) of the current map segment.`);
           }
           // 만약 플레이어가 움직이지 않았을 경우 (이동하거나 낙하할 필요가 없었을 경우) movedDownThisTick은 false 유지
 
@@ -398,7 +405,7 @@ export default function App() {
           console.log(`Pre-setPosition check: newPlayerX=${newPlayerX}, position.x=${position.x}, newPlayerY=${newPlayerY}, position.y=${position.y}, movedDownThisTick=${movedDownThisTick}`);
           if (newPlayerX !== position.x || newPlayerY !== position.y || movedDownThisTick) { // movedDownThisTick을 조건에 포함
             setPosition({ x: newPlayerX, y: newPlayerY });
-            console.log(`!!! SETTING POSITION: (${newPlayerX}, ${newPlayerY})`);
+            console.log(`!!! SETTING POSITION (Actual Move): (${newPlayerX}, ${newPlayerY})`);
 
             // 스크롤 오프셋 계산
             if (newPlayerY >= SCROLL_THRESHOLD_Y) { // newPlayerY 기준으로 스크롤
@@ -433,7 +440,7 @@ export default function App() {
             }
           }
 
-          console.log(`--- Game Tick End ---`);
+          console.log(`--- Game Tick End (Y: ${newPlayerY}) ---`); // Add Y to end log
           return currentMap;
         });
       }, JUMP_OFFSET_DURATION);
