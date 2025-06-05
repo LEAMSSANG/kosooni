@@ -602,43 +602,14 @@ export default function App() {
     // --- 여기까지 도달했다면 캔버스에 그릴 준비가 된 것입니다 ---
     console.log(`[Drawing useEffect Init] Ready to draw game content.`);
 
-    // 캔버스 크기 조정 로직: CSS 크기를 기반으로 내부 해상도 설정
-    const parentDiv = canvas.parentElement;
-    const canvasCssWidth = parentDiv ? parentDiv.clientWidth : window.innerWidth;
-    const canvasCssHeight = parentDiv ? parentDiv.clientHeight : window.innerHeight;
+    // 캔버스 내부 해상도를 게임 월드 크기에 고정
+    canvas.width = TILE_SIZE * MAP_WIDTH;  // 600px
+    canvas.height = TILE_SIZE * MAP_HEIGHT; // 800px
 
-    // Set the internal drawing buffer resolution to match the CSS size
-    canvas.width = canvasCssWidth;
-    canvas.height = canvasCssHeight;
-
-    // 맵의 실제 픽셀 너비와 높이
-    const mapPixelWidth = TILE_SIZE * MAP_WIDTH;
-    const mapPixelHeight = TILE_SIZE * MAP_HEIGHT;
-
-    // 캔버스의 너비와 높이 설정.
-    // 캔버스를 꽉 채우도록 하면서도, 비율을 유지하도록 계산.
-    let scale;
-    let offsetX = 0;
-    let offsetY_draw = 0;
-
-    const canvasAspectRatio = canvas.width / canvas.height;
-    const mapAspectRatio = mapPixelWidth / mapPixelHeight;
-
-    if (canvasAspectRatio > mapAspectRatio) {
-      // 캔버스가 맵보다 가로로 넓을 때: 높이를 기준으로 스케일
-      scale = canvas.height / mapPixelHeight;
-      offsetX = (canvas.width - (mapPixelWidth * scale)) / 2;
-    } else {
-      // 캔버스가 맵보다 세로로 길거나 같을 때: 너비를 기준으로 스케일
-      scale = canvas.width / mapPixelWidth;
-      offsetY_draw = (canvas.height - (mapPixelHeight * scale)) / 2;
-    }
-    
     const draw = () => {
       // 디버깅을 위한 로그 추가
       console.log('--- Drawing Loop Start (Inside draw function) ---');
       console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
-      console.log(`Scale: ${scale}, OffsetX: ${offsetX}, OffsetY_draw: ${offsetY_draw}`);
       console.log(`Player position: (${position.x}, ${position.y})`);
       const startDrawY = Math.floor(scrollOffset / TILE_SIZE); // draw 함수 내부에서 정의
       console.log(`ScrollOffset: ${scrollOffset}, StartDrawY: ${startDrawY}`);
@@ -650,10 +621,7 @@ export default function App() {
       context.fillStyle = "#222";
       context.fillRect(0, 0, canvas.width, canvas.height);
 
-      context.save(); // 현재 변환 상태 저장
-      context.translate(offsetX, offsetY_draw); // 중앙 정렬을 위한 이동
-      context.scale(scale, scale); // 스케일 적용
-
+      // 스케일 및 오프셋 계산 로직 삭제 (캔버스 자체 크기를 고정했으므로)
       // 맵 그리기 (스크롤 오프셋 적용)
       for (let y = 0; y < MAP_HEIGHT; y++) {
         for (let x = 0; x < MAP_WIDTH; x++) {
@@ -736,7 +704,6 @@ export default function App() {
           // 용암 타일 그리기 (NEW)
           else if (typeof tile === 'object' && tile.type === 'lava') {
             context.drawImage(lavaImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            // console.log(`Drawing lava tile at (${x}, ${y})`); // 용암 타일이 그려지고 있는지 확인
           }
         }
       }
@@ -762,10 +729,10 @@ export default function App() {
       );
       context.globalAlpha = 1.0; // 알파값 원복
 
-      context.restore(); // 저장된 변환 상태 복원 (스케일 초기화)
-
       // 체력 하트 그리기 (캔버스 스케일과 별개로 고정 위치에)
-      context.save();
+      context.restore(); // 저장된 변환 상태 복원 (이전 save에서 translate/scale 복원)
+      context.save(); // 새로운 변환 상태 저장 (HUD용)
+
       const heartSize = 25 * 0.7; // 하트 크기 (70%로 줄임)
       const heartSpacing = 5; // 하트 간 간격
       const startX = 10; // 좌상단 시작 X 위치
@@ -796,9 +763,7 @@ export default function App() {
           context.stroke();
         }
       }
-      context.restore(); // 저장된 변환 상태 복원
-
-      // 레벨 및 경험치 정보 표시 (상단 중앙)
+      // 레벨 및 경험치 정보 표시 (상단 중앙) - 이제 캔버스 크기가 고정되므로, canvas.width / 2 사용 가능
       context.fillStyle = "white";
       context.font = "20px Arial";
       context.textAlign = "center";
@@ -811,10 +776,14 @@ export default function App() {
         context.font = "30px Arial";
         context.textAlign = "center";
         context.textBaseline = "middle";
-        // 꼬순이 위치를 기준으로 메시지 Y 좌표 계산
-        const messageY = kosooniDisplayY + offsetY - TILE_SIZE; // 꼬순이 타일 위쪽으로
+        // 꼬순이 위치를 기준으로 메시지 Y 좌표 계산 (이전 스케일링이 없으므로 직접 계산)
+        // 꼬순이 타일의 Y 위치(px) + 캔버스의 실제 CSS 스케일 비율을 고려해야 함
+        // 현재는 캔버스 내부 해상도가 고정되어 있으므로, 직접 픽셀 좌표 사용
+        const messageY = (position.y >= SCROLL_THRESHOLD_Y ? SCROLL_THRESHOLD_Y : position.y) * TILE_SIZE + offsetY - TILE_SIZE; 
         context.fillText(levelUpMessage, position.x * TILE_SIZE + TILE_SIZE / 2, messageY);
       }
+      
+      context.restore(); // HUD용 변환 상태 복원
       console.log('--- Drawing Loop End (Inside draw function) ---');
     };
 
@@ -823,31 +792,9 @@ export default function App() {
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        // Canvas의 CSS 크기를 부모 컨테이너에 꽉 차도록 설정
-        canvas.style.width = '100%';
-        canvas.style.height = '100%';
-
-        // 실제 렌더링된 CSS 크기를 가져와 내부 드로잉 버퍼 해상도 설정
-        const canvasCssWidth = canvas.clientWidth;
-        const canvasCssHeight = canvas.clientHeight;
-
-        console.log(`[Resize Effect] clientWidth=${canvasCssWidth}, clientHeight=${canvasCssHeight}`);
-        console.log(`[Resize Effect] Setting canvas.width=${canvasCssWidth}, canvas.height=${canvasCssHeight}`);
-
-        canvas.width = canvasCssWidth;
-        canvas.height = canvasCssHeight;
-      }
-    };
-    window.addEventListener("resize", handleResize);
-    // 초기 로드 시에도 크기 조정 적용
-    handleResize();
-
+    // handleResize 함수는 이제 필요 없음. CSS로 캔버스 크기 조절
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", handleResize);
     };
   }, [handleKeyDown, gamePhase]); 
 
@@ -881,7 +828,7 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative overflow-hidden" 
+      className="flex flex-col items-center justify-center min-h-screen bg-black text-white relative overflow-hidden p-4" // padding 추가
       onTouchStart={gamePhase === 'game' ? handleTouchMove : undefined}
       onTouchMove={gamePhase === 'game' ? handleTouchMove : undefined}
     >
@@ -956,7 +903,21 @@ export default function App() {
         <div className="relative w-full h-full flex items-center justify-center"> {/* 캔버스 및 버튼을 감싸는 컨테이너 */}
           <canvas
             ref={canvasRef}
-            style={{ display: 'block' }} 
+            // 캔버스 내부 해상도를 게임 월드 크기에 고정
+            width={TILE_SIZE * MAP_WIDTH}  // 600px
+            height={TILE_SIZE * MAP_HEIGHT} // 800px
+            // CSS로 캔버스가 부모 컨테이너에 맞춰 스케일되도록 설정
+            style={{ 
+              display: 'block', 
+              maxWidth: '100%', 
+              maxHeight: 'calc(100vh - 80px)', // 화면 높이에서 상하 여백을 고려하여 최대 높이 제한 (예: 80px)
+              width: 'auto', // 가로세로 비율 유지하면서 자동으로 너비 조절
+              height: 'auto', // 가로세로 비율 유지하면서 자동으로 높이 조절
+              objectFit: 'contain', // 내용이 잘리지 않고 비율 유지하며 확대/축소
+              border: '4px solid #FACC15', // 기존 border 추가
+              borderRadius: '0.5rem', // 기존 rounded-lg 추가
+              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)' // 기존 shadow-lg 추가
+            }} 
           ></canvas>
         </div>
       )}
