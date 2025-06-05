@@ -209,10 +209,7 @@ export default function App() {
     const map: MapTile[][] = [];
     // 플레이어가 처음 몇 칸은 자유롭게 낙하할 수 있도록, 초기 4줄을 비워둠
     for (let y = 0; y < 4; y++) {
-        const row: MapTile[] = []; // 각 행을 명시적으로 초기화
-        for (let x = 0; x < MAP_WIDTH; x++) {
-            row.push(null); // 명시적으로 null 값을 추가
-        }
+        const row: MapTile[] = Array(MAP_WIDTH).fill(null); // 명시적으로 null 값으로 채움
         map.push(row);
     }
     // 그 다음부터 무작위 광물 행 생성
