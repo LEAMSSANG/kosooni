@@ -578,7 +578,8 @@ export default function App() {
       context.font = "20px Arial";
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText("로딩 중...", canvas.width / 2, canvas.height / 2);
+      // 로딩 진행 상황을 표시
+      context.fillText(`로딩 중... (${loadedImageCount}/${totalImagesToLoad})`, canvas.width / 2, canvas.height / 2);
       return;
     }
 
@@ -794,7 +795,7 @@ export default function App() {
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, lavaImage, dirtImage, copperImage, silverImage, goldImage, diamondImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, playerLevel, currentXP, xpToNextLevel, levelUpMessage, isLevelingUp]); // 새로운 이미지 Ref들과 레벨 관련 상태들을 의존성 배열에 추가
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, lavaImage, dirtImage, copperImage, silverImage, goldImage, diamondImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, playerLevel, currentXP, xpToNextLevel, levelUpMessage, isLevelingUp, loadedImageCount, totalImagesToLoad]); // loadedImageCount와 totalImagesToLoad를 의존성 배열에 추가
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -859,7 +860,10 @@ export default function App() {
       {gamePhase === 'opening' && (
         <div className="flex flex-col items-center justify-center w-full h-full cursor-pointer" onClick={handleOpeningClick}>
           {!imagesLoaded ? (
-            <p className="text-xl">로딩 중...</p>
+            // 이미지 로딩 진행 상황을 표시
+            <p className="text-xl">
+              로딩 중... ({loadedImageCount}/{totalImagesToLoad})
+            </p>
           ) : (
             <img
               src={kosooniTitleBannerImage.current.src} 
