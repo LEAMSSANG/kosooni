@@ -29,25 +29,25 @@ export default function App() {
     };
 
     // 이미지 로딩 실패 시 콘솔에 로그 출력
-    const handleImageError = (e: Event, imageName: string, src: string) => {
-      console.error(`Failed to load image: "${imageName}" from path: "${src}". Please ensure the file exists in your public folder and the filename (including case) is correct.`, e);
+    const handleImageError = (imageName: string, src: string) => {
+      console.error(`Failed to load image: "${imageName}" from path: "${src}". Please ensure the file exists in your public folder and the filename (including case) is correct.`, { isTrusted: true });
     };
 
     // 각 이미지의 onload 및 onerror 이벤트 핸들러 등록
     kosooniImage.current.onload = handleImageLoad;
-    kosooniImage.current.onerror = (e) => handleImageError(e, "kosooni_character_40x40.png", kosooniImage.current.src);
+    kosooniImage.current.onerror = () => handleImageError("kosooni_character_40x40.png", kosooniImage.current.src);
 
     sweetpotatoImage.current.onload = handleImageLoad;
-    sweetpotatoImage.current.onerror = (e) => handleImageError(e, "sweetpotato_better.png", sweetpotatoImage.current.src);
+    sweetpotatoImage.current.onerror = () => handleImageError("sweetpotato_better.png", sweetpotatoImage.current.src);
 
     bombImage.current.onload = handleImageLoad;
-    bombImage.current.onerror = (e) => handleImageError(e, "bomb.png", bombImage.current.src);
+    bombImage.current.onerror = () => handleImageError("bomb.png", bombImage.current.src);
 
     kosooniTitleBannerImage.current.onload = handleImageLoad;
-    kosooniTitleBannerImage.current.onerror = (e) => handleImageError(e, "kosooni_title_banner_eng_v2.png", kosooniTitleBannerImage.current.src);
+    kosooniTitleBannerImage.current.onerror = () => handleImageError("kosooni_title_banner_eng_v2.png", kosooniTitleBannerImage.current.src);
 
     lavaImage.current.onload = handleImageLoad;
-    lavaImage.current.onerror = (e) => handleImageError(e, "lava.png", lavaImage.current.src); // 용암 이미지 로드 오류 핸들러
+    lavaImage.current.onerror = () => handleImageError("lava.png", lavaImage.current.src); // 용암 이미지 로드 오류 핸들러
 
     // 이미지 src 설정 (public 폴더 경로)
     kosooniImage.current.src = "/kosooni_character_40x40.png";
@@ -446,7 +446,8 @@ export default function App() {
       }
 
       if (playerMoved) {
-        setPosition((prev) => ({ x: targetX, y: y }));
+        // 'prev' 변수 제거하고 직접 새 상태 값을 전달
+        setPosition({ x: targetX, y: y });
         // 용암 타일 진입 시 피해 적용 (좌우 이동 시)
         const tileAtNewPosition = currentMap[y]?.[targetX];
         if (tileAtNewPosition && typeof tileAtNewPosition === 'object' && tileAtNewPosition.type === 'lava') {
