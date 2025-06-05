@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [position, setPosition] = useState({ x: 5, y: 0 }); // 꼬순이의 논리적(절대) Y 위치
+  const [position, setPosition] = useState({ x: 5, y: 1 }); // 꼬순이의 논리적(절대) Y 위치를 0 -> 1로 수정하여 둘째 줄에서 시작
   const [offsetY, setOffsetY] = useState(0); // 낙하 애니메이션을 위한 Y축 오프셋
   const [scrollOffset, setScrollOffset] = useState(0); // 맵 스크롤을 위한 Y축 오프셋
   const [onLava, setOnLava] = useState(false); // 플레이어가 용암 위에 있는지 추적하는 상태 (피해 한 번만 적용)
@@ -126,7 +126,7 @@ export default function App() {
       copperImage.current.onload = null; copperImage.current.onerror = null;
       silverImage.current.onload = null; silverImage.current.onerror = null;
       goldImage.current.onload = null; goldImage.current.onerror = null;
-      diamondImage.current.onload = null; diamondImage.current.onerror = null;
+      diamondImage.current.onerror = null; diamondImage.current.onerror = null;
     };
   }, []); // 컴포넌트 마운트 시 한 번만 실행
 
@@ -281,6 +281,12 @@ export default function App() {
   // 캐릭터가 화면 중간에 고정되기 시작하는 Y 좌표 (타일 기준)
   const SCROLL_THRESHOLD_Y = Math.floor(MAP_HEIGHT / 3); // 예를 들어, 화면 높이의 1/3 지점
 
+  // 사용자 정의 타입 가드 함수
+  const isMineralTile = (tile: MapTile): tile is MineralTileObject => {
+    return tile !== null && (tile.type === 'dirt' || tile.type === 'copper' || tile.type === 'silver' || tile.type === 'gold' || tile.type === 'diamond' || tile.type === 'sweetpotato');
+  };
+
+
   useEffect(() => {
     if (!imagesLoaded || gamePhase !== 'game') return; // 이미지가 로드되지 않았거나 게임 단계가 아니면 게임 루프 시작 안 함
 
@@ -353,8 +359,8 @@ export default function App() {
               } else if (tileBelowCurrentPos.type === 'bomb') {
                   // 폭탄 위에서는 멈춤.
                   console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${newPlayerY + 1})`);
-              } else if (typeof tileBelowCurrentPos === 'object' && 'health' in tileBelowCurrentPos) { // 명시적인 타입 가드 추가
-                  const mineralTile = tileBelowCurrentPos as MineralTileObject; // 이제 안전하게 타입 단언
+              } else if (isMineralTile(tileBelowCurrentPos)) { // 사용자 정의 타입 가드 사용
+                  const mineralTile = tileBelowCurrentPos; // 이제 TypeScript가 MineralTileObject임을 앎
                   console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}`);
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
                       // 체력 감소, 플레이어는 현재 위치 유지
@@ -411,7 +417,7 @@ export default function App() {
             } else { // 용암 타일이 아니면 onLava 상태 초기화
                 if (onLava) { // 용암에서 벗어났을 때만 초기화
                     setOnLava(false);
-                    console.log("Player left lava, onLava set to false.");
+                    console.log("Player stayed, but not on lava anymore. onLava set to false.");
                 }
             }
 
@@ -433,7 +439,7 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH]);
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH, isMineralTile]);
 
   // 레벨업 처리 useEffect (currentXP 또는 xpToNextLevel이 변경될 때마다 실행)
   useEffect(() => {
@@ -500,8 +506,8 @@ export default function App() {
             currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
           }
           // 플레이어는 폭탄 위로 이동하지 않음
-        } else if (typeof tileAtTarget === 'object' && 'health' in tileAtTarget) { // 명시적인 타입 가드 추가
-          const mineralTile = tileAtTarget as MineralTileObject; // 이제 안전하게 타입 단언
+        } else if (isMineralTile(tileAtTarget)) { // 사용자 정의 타입 가드 사용
+          const mineralTile = tileAtTarget; // 이제 TypeScript가 MineralTileObject임을 앎
           if (mineralTile.health > DRILL_ATTACK_POWER) {
             // 체력 감소, 플레이어는 현재 위치 유지
             currentMap[y][targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
@@ -541,7 +547,7 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava, MINERAL_HEALTH]);
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava, MINERAL_HEALTH, isMineralTile]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 키보드 입력 무시
@@ -774,7 +780,7 @@ export default function App() {
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, kosooniImage, sweetpotatoImage, bombImage, lavaImage, dirtImage, copperImage, silverImage, goldImage, diamondImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, playerLevel, currentXP, xpToNextLevel, levelUpMessage, isLevelingUp, loadedImageCount, totalImagesToLoad]);
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, kosooniImage, sweetpotatoImage, bombImage, lavaImage, dirtImage, copperImage, silverImage, goldImage, diamondImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, playerLevel, currentXP, xpToNextLevel, levelUpMessage, isLevelingUp, loadedImageCount, totalImagesToLoad, isMineralTile]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
