@@ -305,35 +305,30 @@ export default function App() {
   }, [isAttacking, ATTACK_JUMP_OFFSET, ATTACK_JUMP_DURATION]);
 
 
+  // 게임 틱 로직 (낙하, 폭탄, 경험치 획득 등)
   useEffect(() => {
-    if (!imagesLoaded || gamePhase !== 'game') return; // 이미지가 로드되지 않았거나 게임 단계가 아니면 게임 루프 시작 안 함
+    if (!imagesLoaded || gamePhase !== 'game') return;
 
     const gameInterval = setInterval(() => {
       // 공격 애니메이션 중이 아니면 일반적인 낙하/움직임 바운스 적용
-      if (!isAttacking) {
-        setOffsetY(-5); // 캐릭터가 살짝 위로 올라가는 듯한 애니메이션 효과 시작
+      // 이 부분은 isAttacking useEffect에서 처리되므로, 여기서는 기본 낙하/이동만 고려
+      if (!isAttacking) { // isAttacking이 아닐 때만 미세 낙하 애니메이션 적용
+        setOffsetY(-5); 
         setTimeout(() => {
-          setOffsetY(0); // 오프셋 초기화 (원래 위치로 돌아옴)
+          setOffsetY(0);
         }, JUMP_OFFSET_DURATION);
       }
 
       setTileMap((prevMap) => {
           let currentMap = prevMap.map(row => [...row]);
-          let newPlayerX = position.x; // 현재 꼬순이 X 위치에서 시작
-          let newPlayerY = position.y; // 현재 꼬순이 Y 위치에서 시작
-
-          // Debugging: Log initial player position and surrounding tiles
-          console.log(`--- Game Tick Start (Y: ${position.y}) ---`); // Add Y to start log
-          console.log(`Initial Player Position: (${position.x}, ${position.y})`);
-          console.log(`Tile at Player Pos: (${position.x}, ${position.y}) is `, currentMap[position.y]?.[position.x]);
-          
+          let newPlayerX = position.x;
+          let newPlayerY = position.y;
 
           let bombsToExplode: { x: number; y: number; }[] = [];
           for (let y = 0; y < currentMap.length; y++) {
             for (let x = 0; x < MAP_WIDTH; x++) {
               const tile = currentMap[y][x];
               if (typeof tile === 'object' && tile !== null && tile.type === 'bomb') {
-                // 폭탄 활성화 로직: 캐릭터가 3타일 이내에 있으면 카운트다운 시작
                 const distance = Math.max(
                   Math.abs(x - position.x),
                   Math.abs(y - position.y)
@@ -350,125 +345,93 @@ export default function App() {
             }
           }
 
-          // 폭탄 폭발 처리 및 플레이어 밀림 로직
           bombsToExplode.forEach(({ x: bombX, y: bombY }) => {
             const { newMap: mapAfterExplosion, pushedPlayerX: tempPushedX } = explodeBomb(bombX, bombY, currentMap, newPlayerX, newPlayerY);
-            currentMap = mapAfterExplosion; // 맵 업데이트
-            newPlayerX = tempPushedX; // 폭탄에 의해 밀려난 새로운 X 위치 적용
-            console.log(`Bomb exploded at (${bombX}, ${bombY}). Player pushed to X: ${newPlayerX}`);
+            currentMap = mapAfterExplosion;
+            newPlayerX = tempPushedX;
           });
 
-          // 낙하 로직 개선: 매 틱마다 한 칸씩 떨어지거나, 블록과 상호작용
-          let movedDownThisTick = false; // 수직 이동이 있었는지 확인
-
+          let movedDownThisTick = false;
           const nextPlayerYCandidate = newPlayerY + 1;
 
-          // 다음 Y 위치가 맵 범위를 벗어나지 않는지 먼저 확인
           if (nextPlayerYCandidate < currentMap.length) {
               const tileBelowCurrentPos = currentMap[nextPlayerYCandidate][newPlayerX];
-              console.log(`[Falling Logic] Checking tile below at (${newPlayerX}, ${nextPlayerYCandidate}): `, tileBelowCurrentPos, `(Type: ${typeof tileBelowCurrentPos}, Is null: ${tileBelowCurrentPos === null})`);
-
 
               if (tileBelowCurrentPos === null) {
-                  // 아래가 비어있으면 한 칸 낙하
                   newPlayerY++;
                   movedDownThisTick = true;
-                  console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (empty space)`);
               } else if (tileBelowCurrentPos === undefined) {
-                  // 이 경우는 currentMap[nextPlayerYCandidate] 자체가 undefined인 경우
-                  // 즉, nextPlayerYCandidate는 currentMap.length보다 작지만, 해당 row가 없는 경우 (희귀)
                   console.warn(`[Falling Logic] Tile below is unexpectedly undefined at [${nextPlayerYCandidate}][${newPlayerX}]. This suggests a map indexing problem.`);
-                  // undefined일 경우, 더 이상 낙하하지 않고 현재 위치 유지
               } else if (tileBelowCurrentPos.type === 'lava') {
-                  // 아래가 용암이면 한 칸 낙하 (피해는 이후 로직에서 처리)
                   newPlayerY++;
                   movedDownThisTick = true;
-                  console.log(`[Falling Logic] Player fell to Y: ${newPlayerY} (lava)`);
               } else if (tileBelowCurrentPos.type === 'bomb') {
-                  // 폭탄 위에서는 멈춤.
-                  console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${nextPlayerYCandidate})`);
-              } else if (isMineralTile(tileBelowCurrentPos)) { // 사용자 정의 타입 가드 사용
-                  const mineralTile = tileBelowCurrentPos; // 이제 TypeScript가 MineralTileObject임을 앎
-                  console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${nextPlayerYCandidate}) with health: ${mineralTile.health}, drill power: ${DRILL_ATTACK_POWER}`); // Log drill power
+                  // 폭탄 위에서는 멈춤
+              } else if (isMineralTile(tileBelowCurrentPos)) {
+                  const mineralTile = tileBelowCurrentPos;
+                  // 공격은 movePlayer에서 처리되므로, 여기서 직접 타일을 파괴하지 않고 낙하만 멈춥니다.
+                  // 다만, 드릴 파워가 적용되는 로직은 이곳에 있어야 함.
+                  // 이 로직은 캐릭터가 '아래'로 이동하려 할 때 아래 타일을 파괴하는 로직입니다.
+                  // 좌우 이동 시 공격은 movePlayer에서 처리됩니다.
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
-                      // 체력 감소, 플레이어는 현재 위치 유지
                       currentMap[nextPlayerYCandidate][newPlayerX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
-                      // 이 로그에서 업데이트된 맵의 요소를 다시 참조하는 대신 mineralTile 변수를 사용
-                      console.log(`[Falling Logic] Mineral health reduced to: ${mineralTile.health - DRILL_ATTACK_POWER}. Player stays.`);
                   } else {
-                      // 체력이 0 이하가 되면 타일 파괴, 플레이어 낙하
                       currentMap[nextPlayerYCandidate][newPlayerX] = null;
-                      newPlayerY++; // 파괴된 빈 공간으로 낙하
-                      movedDownThisTick = true; // 낙하 발생
-                      console.log(`[Falling Logic] Mineral broken (was health ${mineralTile.health}), player fell to Y: ${newPlayerY}`);
-                      // 고구마 타일 파괴 시 체력 회복
+                      newPlayerY++;
+                      movedDownThisTick = true;
                       if (mineralTile.type === 'sweetpotato') {
                           setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
                       }
-                      // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
                       setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
                   }
               }
-          } else {
-              // 맵의 가장 아래에 도달한 경우 (더 이상 아래로 갈 수 없음)
-              console.log(`[Falling Logic] Player is at the bottom edge (or beyond) of the current map segment. Max map Y: ${currentMap.length - 1}`);
           }
-          // 만약 플레이어가 움직이지 않았을 경우 (이동하거나 낙하할 필요가 없었을 경우) movedDownThisTick은 false 유지
 
-          // 무한 맵 로직: 플레이어가 맵의 끝에 가까워지면 새로운 행 추가
           const MAP_GENERATE_THRESHOLD = currentMap.length - MAP_HEIGHT;
-          if (newPlayerY >= MAP_GENERATE_THRESHOLD) { // newPlayerY 기준으로 검사
+          if (newPlayerY >= MAP_GENERATE_THRESHOLD) {
             currentMap.push(generateNewRow());
-            console.log(`New row generated. Map length: ${currentMap.length}`);
           }
 
-          // 플레이어 위치가 변경되었거나, 이번 틱에 수직 이동이 발생했을 경우에만 상태 업데이트
-          console.log(`Pre-setPosition check: newPlayerX=${newPlayerX}, position.x=${position.x}, newPlayerY=${newPlayerY}, position.y=${position.y}, movedDownThisTick=${movedDownThisTick}`);
-          if (newPlayerX !== position.x || newPlayerY !== position.y || movedDownThisTick) { // movedDownThisTick을 조건에 포함
+          if (newPlayerX !== position.x || newPlayerY !== position.y || movedDownThisTick) {
             setPosition({ x: newPlayerX, y: newPlayerY });
-            console.log(`!!! SETTING POSITION (Actual Move): (${newPlayerX}, ${newPlayerY})`);
 
-            // 스크롤 오프셋 계산
-            if (newPlayerY >= SCROLL_THRESHOLD_Y) { // newPlayerY 기준으로 스크롤
+            if (newPlayerY >= SCROLL_THRESHOLD_Y) {
               setScrollOffset((newPlayerY - SCROLL_THRESHOLD_Y) * TILE_SIZE);
             } else {
               setScrollOffset(0);
             }
             
-            // 용암 타일 진입 시 피해 적용 (한 번만)
-            const tileAtNewPosition = currentMap[newPlayerY]?.[newPlayerX]; // newPlayerY 기준으로 검사
+            const tileAtNewPosition = currentMap[newPlayerY]?.[newPlayerX];
             if (tileAtNewPosition && typeof tileAtNewPosition === 'object' && tileAtNewPosition.type === 'lava') {
-                if (!onLava) { // 용암에 새로 진입했을 때만
+                if (!onLava) {
                     setCurrentHealth(prev => Math.max(0, prev - 1));
                     setOnLava(true);
-                    console.log("Player entered lava, health -1. onLava set to true.");
                 }
-            } else { // 용암 타일이 아니면 onLava 상태 초기화
-                if (onLava) { // 용암에서 벗어났을 때만 초기화
+            } else {
+                if (onLava) {
                     setOnLava(false);
-                    console.log("Player stayed, but not on lava anymore. onLava set to false.");
                 }
             }
-
-          } else { // 플레이어가 움직이지 않았을 경우 (낙하도, 좌우 이동도 없음)
-            // 용암 타일에서 벗어났는지 확인하여 onLava 상태 초기화
+          } else {
             const tileAtCurrentPos = currentMap[position.y]?.[position.x];
             if (!(tileAtCurrentPos && typeof tileAtCurrentPos === 'object' && tileAtCurrentPos.type === 'lava')) {
                 if (onLava) {
                     setOnLava(false);
-                    console.log("Player stayed, but not on lava anymore. onLava set to false.");
                 }
             }
           }
-
-          console.log(`--- Game Tick End (Y: ${newPlayerY}) ---`); // Add Y to end log
           return currentMap;
-        });
-      }, JUMP_OFFSET_DURATION);
+      });
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH, isMineralTile, isAttacking]);
+  }, [
+    position, explodeBomb, generateNewRow, DRILL_ATTACK_POWER,
+    imagesLoaded, gamePhase, onLava, isMineralTile, isAttacking,
+    JUMP_OFFSET_DURATION, SCROLL_THRESHOLD_Y, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT,
+    BOMB_INITIAL_COUNTDOWN, PLAYER_MAX_HEALTH, MINERAL_HEALTH
+  ]);
+
 
   // 레벨업 처리 useEffect (currentXP 또는 xpToNextLevel이 변경될 때마다 실행)
   useEffect(() => {
@@ -565,7 +528,6 @@ export default function App() {
 
       if (playerMoved) {
         setPosition({ x: targetX, y: y });
-        console.log(`!!! SETTING POSITION (Horizontal Move): (${targetX}, ${y})`);
         // 용암 타일 진입 시 피해 적용 (좌우 이동 시)
         // 이동 후에 다시 해당 위치의 타일을 확인해야 정확한 상태를 반영함
         const tileAtNewPosition = currentMap[y]?.[targetX]; 
@@ -573,12 +535,10 @@ export default function App() {
             if (!onLava) { // 용암에 새로 진입했을 때만
                 setCurrentHealth(prev => Math.max(0, prev - 1));
                 setOnLava(true);
-                console.log("Player entered lava (sideways), health -1. onLava set to true.");
             }
         } else { // 용암 타일이 아니면 onLava 상태 초기화
             if (onLava) {
                 setOnLava(false);
-                console.log("Player left lava (sideways), onLava set to false.");
             }
         }
       }
@@ -595,17 +555,12 @@ export default function App() {
 
   // Canvas 그리기 로직
   useEffect(() => {
-    // 이 useEffect가 호출되는 시점의 gamePhase와 imagesLoaded 상태를 기록
-    console.log(`[Drawing useEffect Init] Current gamePhase: ${gamePhase}, imagesLoaded: ${imagesLoaded}`);
-
     const canvas = canvasRef.current;
     if (!canvas) {
-      console.warn('[Drawing useEffect Init] Canvas ref is null or undefined.');
       return;
     }
     const context = canvas.getContext("2d");
     if (!context) {
-      console.warn('[Drawing useEffect Init] Canvas context is null or undefined.');
       return;
     }
 
@@ -619,37 +574,20 @@ export default function App() {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(`로딩 중... (${loadedImageCount}/${totalImagesToLoad})`, canvas.width / 2, canvas.height / 2);
-      console.log(`[Drawing useEffect Init] Images not loaded, displaying loading message.`);
       return;
     }
 
     // 게임 단계가 'game'이 아니면 캔버스 내용 지우고 바로 종료
     if (gamePhase !== 'game') {
       context.clearRect(0, 0, canvas.width, canvas.height);
-      console.log(`[Drawing useEffect Init] Not in 'game' phase, clearing canvas.`);
       return;
     }
-
-    // --- 여기까지 도달했다면 캔버스에 그릴 준비가 된 것입니다 ---
-    console.log(`[Drawing useEffect Init] Ready to draw game content.`);
 
     // 캔버스 내부 해상도를 게임 월드 크기에 고정
     canvas.width = TILE_SIZE * MAP_WIDTH;  // 600px
     canvas.height = TILE_SIZE * MAP_HEIGHT; // 800px
 
     const draw = () => {
-      // 디버깅을 위한 로그 추가
-      console.log('--- Drawing Loop Start (Inside draw function) ---');
-      console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
-      console.log(`Player position: (${position.x}, ${position.y})`);
-      const startDrawY = Math.floor(scrollOffset / TILE_SIZE); // draw 함수 내부에서 정의
-      console.log(`ScrollOffset: ${scrollOffset}, StartDrawY: ${startDrawY}`);
-      console.log(`Current gamePhase: ${gamePhase}, imagesLoaded: ${imagesLoaded}`);
-      console.log(`TileMap length: ${tileMap.length}`);
-      console.log(`Tile at player pos: (${position.x}, ${position.y}) is `, tileMap[position.y]?.[position.x]);
-      console.log(`Tile below player pos: (${position.x}, ${position.y + 1}) is `, tileMap[position.y + 1]?.[position.x]);
-
-
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = "#222";
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -657,7 +595,7 @@ export default function App() {
       // 맵 그리기 (스크롤 오프셋 적용)
       for (let y = 0; y < MAP_HEIGHT; y++) {
         for (let x = 0; x < MAP_WIDTH; x++) {
-          const actualMapY = startDrawY + y;
+          const actualMapY = Math.floor(scrollOffset / TILE_SIZE) + y; // startDrawY를 여기서 직접 계산
           const tile = tileMap[actualMapY]?.[x];
 
           if (tile === null || tile === undefined) {
@@ -814,7 +752,6 @@ export default function App() {
       }
       
       context.restore(); // HUD용 변환 상태 복원
-      console.log('--- Drawing Loop End (Inside draw function) ---');
     };
 
     draw();
@@ -844,14 +781,12 @@ export default function App() {
   // 오프닝 화면 클릭 핸들러
   const handleOpeningClick = useCallback(() => {
     if (imagesLoaded) { // 이미지가 모두 로드된 후에만 전환
-      console.log('handleOpeningClick called. Setting gamePhase to "story".');
       setGamePhase('story');
     }
   }, [imagesLoaded]);
 
   // 스토리 화면 완료 핸들러
   const handleStoryComplete = useCallback(() => {
-    console.log('handleStoryComplete called. Setting gamePhase to "game".');
     setGamePhase('game');
   }, []);
 
