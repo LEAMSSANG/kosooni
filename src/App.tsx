@@ -622,6 +622,16 @@ export default function App() {
     }
     
     const draw = () => {
+      // 디버깅을 위한 로그 추가
+      console.log('--- Drawing Loop Start ---');
+      console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
+      console.log(`Scale: ${scale}, OffsetX: ${offsetX}, OffsetY_draw: ${offsetY_draw}`);
+      console.log(`Player position: (${position.x}, ${position.y})`);
+      console.log(`ScrollOffset: ${scrollOffset}, StartDrawY: ${startDrawY}`);
+      console.log(`Current gamePhase: ${gamePhase}, imagesLoaded: ${imagesLoaded}`);
+      console.log('TileMap sample (first 2 rows):', tileMap.slice(0, 2));
+
+
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.fillStyle = "#222";
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -713,7 +723,7 @@ export default function App() {
           // 용암 타일 그리기 (NEW)
           else if (typeof tile === 'object' && tile.type === 'lava') {
             context.drawImage(lavaImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            console.log(`Drawing lava tile at (${x}, ${y})`); // 용암 타일이 그려지고 있는지 확인
+            // console.log(`Drawing lava tile at (${x}, ${y})`); // 용암 타일이 그려지고 있는지 확인
           }
         }
       }
