@@ -353,8 +353,8 @@ export default function App() {
               } else if (tileBelowCurrentPos.type === 'bomb') {
                   // 폭탄 위에서는 멈춤.
                   console.log(`[Falling Logic] Landed on bomb at (${newPlayerX}, ${newPlayerY + 1})`);
-              } else { // 나머지 경우는 MineralTileObject여야 함
-                  const mineralTile = tileBelowCurrentPos as MineralTileObject; // 여기서 안전하게 타입 단언
+              } else if (typeof tileBelowCurrentPos === 'object' && 'health' in tileBelowCurrentPos) { // 명시적인 타입 가드 추가
+                  const mineralTile = tileBelowCurrentPos as MineralTileObject; // 이제 안전하게 타입 단언
                   console.log(`[Falling Logic] Hitting mineral at (${newPlayerX}, ${newPlayerY + 1}) with health: ${mineralTile.health}`);
                   if (mineralTile.health > DRILL_ATTACK_POWER) {
                       // 체력 감소, 플레이어는 현재 위치 유지
@@ -500,8 +500,8 @@ export default function App() {
             currentMap[y][targetX] = { ...tileAtTarget, countdown: BOMB_INITIAL_COUNTDOWN };
           }
           // 플레이어는 폭탄 위로 이동하지 않음
-        } else { // 나머지 경우는 MineralTileObject여야 함
-          const mineralTile = tileAtTarget as MineralTileObject; // 여기서 안전하게 타입 단언
+        } else if (typeof tileAtTarget === 'object' && 'health' in tileAtTarget) { // 명시적인 타입 가드 추가
+          const mineralTile = tileAtTarget as MineralTileObject; // 이제 안전하게 타입 단언
           if (mineralTile.health > DRILL_ATTACK_POWER) {
             // 체력 감소, 플레이어는 현재 위치 유지
             currentMap[y][targetX] = { ...mineralTile, health: mineralTile.health - DRILL_ATTACK_POWER };
