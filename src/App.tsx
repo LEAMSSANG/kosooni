@@ -13,7 +13,7 @@ export default function App() {
   // 이미지 로딩 상태를 관리하는 State 추가
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [loadedImageCount, setLoadedImageCount] = useState(0);
-  const totalImagesToLoad = 5; // 꼬순이, 고구마, 폭탄, 타이틀 배너, 용암 이미지
+  const totalImagesToLoad = 10; // 기존 5개 + 새로운 5개(dirt, copper, silver, gold, diamond) = 10
 
   // 이미지 Ref들
   const kosooniImage = useRef(new Image());
@@ -21,6 +21,36 @@ export default function App() {
   const bombImage = useRef(new Image());
   const kosooniTitleBannerImage = useRef(new Image()); // 타이틀 배너 이미지 Ref 추가
   const lavaImage = useRef(new Image()); // 용암 이미지 Ref 추가
+  // 새로운 광물 이미지 Ref들 추가
+  const dirtImage = useRef(new Image());
+  const copperImage = useRef(new Image());
+  const silverImage = useRef(new Image());
+  const goldImage = useRef(new Image());
+  const diamondImage = useRef(new Image());
+
+  // 꼬순이 레벨 시스템 상태
+  const [playerLevel, setPlayerLevel] = useState(1);
+  const [currentXP, setCurrentXP] = useState(0);
+  const XP_BASE_REQUIRED = 10; // 레벨 1 -> 2에 필요한 기본 경험치
+  const XP_MULTIPLIER = 2; // 다음 레벨에 필요한 경험치 배율
+  const ATTACK_POWER_INCREASE_PER_LEVEL = 1; // 레벨업당 공격력 증가량
+
+  // 레벨업 메시지 및 효과 관련 상태
+  const [levelUpMessage, setLevelUpMessage] = useState('');
+  const [isLevelingUp, setIsLevelingUp] = useState(false);
+
+
+  // 다음 레벨에 필요한 경험치를 계산하는 함수
+  const getXpNeededForLevel = useCallback((level: number) => {
+      // 레벨 1 -> 2: 10, 레벨 2 -> 3: 20, 레벨 3 -> 4: 40 ...
+      return XP_BASE_REQUIRED * (XP_MULTIPLIER ** (level - 1));
+  }, []);
+
+  const [xpToNextLevel, setXpToNextLevel] = useState(getXpNeededForLevel(playerLevel)); // 초기 레벨에 필요한 경험치 (레벨 1 -> 2)
+
+  // 현재 드릴 공격력 (레벨에 따라 증가)
+  const DRILL_ATTACK_POWER = 1 + (playerLevel - 1) * ATTACK_POWER_INCREASE_PER_LEVEL;
+
 
   // 이미지 로딩 처리 useEffect
   useEffect(() => {
@@ -47,7 +77,19 @@ export default function App() {
     kosooniTitleBannerImage.current.onerror = () => handleImageError("kosooni_title_banner_eng_v2.png", kosooniTitleBannerImage.current.src);
 
     lavaImage.current.onload = handleImageLoad;
-    lavaImage.current.onerror = () => handleImageError("lava.png", lavaImage.current.src); // 용암 이미지 로드 오류 핸들러
+    lavaImage.current.onerror = () => handleImageError("lava.png", lavaImage.current.src);
+
+    // 새로운 광물 이미지 로드 핸들러 등록
+    dirtImage.current.onload = handleImageLoad;
+    dirtImage.current.onerror = () => handleImageError("dirt.png", dirtImage.current.src);
+    copperImage.current.onload = handleImageLoad;
+    copperImage.current.onerror = () => handleImageError("copper.png", copperImage.current.src);
+    silverImage.current.onload = handleImageLoad;
+    silverImage.current.onerror = () => handleImageError("silver.png", silverImage.current.src);
+    goldImage.current.onload = handleImageLoad;
+    goldImage.current.onerror = () => handleImageError("gold.png", goldImage.current.src);
+    diamondImage.current.onload = handleImageLoad;
+    diamondImage.current.onerror = () => handleImageError("diamond.png", diamondImage.current.src);
 
     // 이미지 src 설정 (public 폴더 경로)
     kosooniImage.current.src = "/kosooni_character_40x40.png";
@@ -60,6 +102,18 @@ export default function App() {
     console.log("Attempting to load:", kosooniTitleBannerImage.current.src);
     lavaImage.current.src = "/lava.png"; // 용암 이미지 경로
     console.log("Attempting to load:", lavaImage.current.src);
+    // 새로운 광물 이미지 src 설정
+    dirtImage.current.src = "/dirt.png";
+    console.log("Attempting to load:", dirtImage.current.src);
+    copperImage.current.src = "/copper.png";
+    console.log("Attempting to load:", copperImage.current.src);
+    silverImage.current.src = "/silver.png";
+    console.log("Attempting to load:", silverImage.current.src);
+    goldImage.current.src = "/gold.png";
+    console.log("Attempting to load:", goldImage.current.src);
+    diamondImage.current.src = "/diamond.png";
+    console.log("Attempting to load:", diamondImage.current.src);
+
 
     // 컴포넌트 언마운트 시 onload/onerror 핸들러 정리 (메모리 누수 방지)
     return () => {
@@ -68,6 +122,11 @@ export default function App() {
       bombImage.current.onload = null; bombImage.current.onerror = null;
       kosooniTitleBannerImage.current.onload = null; kosooniTitleBannerImage.current.onerror = null;
       lavaImage.current.onload = null; lavaImage.current.onerror = null;
+      dirtImage.current.onload = null; dirtImage.current.onerror = null;
+      copperImage.current.onload = null; copperImage.current.onerror = null;
+      silverImage.current.onload = null; silverImage.current.onerror = null;
+      goldImage.current.onload = null; goldImage.current.onerror = null;
+      diamondImage.current.onload = null; diamondImage.current.onerror = null;
     };
   }, []); // 컴포넌트 마운트 시 한 번만 실행
 
@@ -83,19 +142,15 @@ export default function App() {
   const MAP_WIDTH = 15; // 맵의 가로 타일 개수 (10 -> 15로 변경: 좌우 빈 공간 감소 목적)
   const MAP_HEIGHT = 20; // 화면에 보이는 맵의 세로 타일 개수
 
-  // 타일 종류별 색상 정의 (이미지를 사용할 타일은 여기서 제거)
+  // 타일 종류별 색상 정의 (이제는 이미지를 사용할 것이므로, 사용하지 않는 색상 정의는 삭제)
   const tileColors: Record<string, string> = {
-    dirt: "#8B4513", // 흙
-    copper: "#B87333", // 구리
-    silver: "#C0C0C0", // 은
-    gold: "#FFD700", // 금
-    diamond: "#00FFFF", // 다이아몬드
-    // sweetpotato, bomb, lava는 이제 이미지로 그릴 것이므로 여기서 색상 정의는 사용하지 않음
+    // dirt, copper, silver, gold, diamond는 이제 이미지로 그릴 것이므로 여기서 색상 정의는 사용하지 않음
+    // 필요하다면 다른 타일 색상을 정의할 수 있음
   };
 
   const BOMB_INITIAL_COUNTDOWN = 3; // 폭탄 초기 카운트다운 시간 (초)
   const BOMB_EXPLOSION_RADIUS = 2; // 폭탄 폭발 시 제거되는 타일 범위 (2: 5x5 영역)
-  const DRILL_ATTACK_POWER = 1; // 드릴의 기본 공격력
+  // DRILL_ATTACK_POWER는 playerLevel에 따라 동적으로 계산됩니다.
 
   // 캐릭터 체력 관련 상수
   const PLAYER_INITIAL_HEALTH = 3; // 꼬순이 초기 체력
@@ -327,6 +382,8 @@ export default function App() {
                 if (mineralTile.type === 'sweetpotato') {
                   setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
                 }
+                // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
+                setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
               }
             } else if (typeof tileDirectlyBelowFinalY === 'object' && tileDirectlyBelowFinalY.type === 'bomb') {
               // 폭탄 위에서는 멈춤. 폭탄은 독립적으로 카운트다운 진행.
@@ -389,7 +446,37 @@ export default function App() {
     }, GAME_TICK_INTERVAL);
 
     return () => clearInterval(gameInterval);
-  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava]); 
+  }, [position, explodeBomb, MAP_HEIGHT, JUMP_OFFSET_DURATION, GAME_TICK_INTERVAL, SCROLL_THRESHOLD_Y, generateNewRow, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, onLava, MINERAL_HEALTH]); // MINERAL_HEALTH 의존성 추가
+
+  // 레벨업 처리 useEffect (currentXP 또는 xpToNextLevel이 변경될 때마다 실행)
+  useEffect(() => {
+    if (currentXP >= xpToNextLevel && playerLevel < 99) { // 최대 레벨 제한 (예: 99)
+      setLevelUpMessage('LEVEL UP!');
+      setIsLevelingUp(true);
+      
+      const nextLevel = playerLevel + 1;
+      const remainingXP = currentXP - xpToNextLevel; // 초과 경험치 이월
+
+      setPlayerLevel(nextLevel);
+      setXpToNextLevel(getXpNeededForLevel(nextLevel));
+      setCurrentXP(remainingXP); // 이월된 경험치로 설정
+
+      // 레벨업 메시지 및 반짝임 효과 타이머
+      const messageTimer = setTimeout(() => {
+        setLevelUpMessage('');
+      }, 1500); // 1.5초 후 메시지 사라짐
+
+      const blinkingTimer = setTimeout(() => {
+        setIsLevelingUp(false);
+      }, 2000); // 2초 후 반짝임 효과 종료
+
+      return () => {
+        clearTimeout(messageTimer);
+        clearTimeout(blinkingTimer);
+      };
+    }
+  }, [currentXP, xpToNextLevel, playerLevel, getXpNeededForLevel]);
+
 
   useEffect(() => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 점멸 효과 시작 안 함
@@ -430,6 +517,8 @@ export default function App() {
             if (mineralTile.type === 'sweetpotato') {
               setCurrentHealth(prev => Math.min(prev + 1, PLAYER_MAX_HEALTH));
             }
+            // 타일 파괴 시 경험치 획득 (타일의 원래 체력만큼)
+            setCurrentXP(prev => prev + MINERAL_HEALTH[mineralTile.type]);
           }
         } else if (typeof tileAtTarget === 'object' && tileAtTarget.type === 'bomb') { // 폭탄 타일인 경우
           // 폭탄 타일인 경우, 비활성 상태면 활성화
@@ -446,7 +535,6 @@ export default function App() {
       }
 
       if (playerMoved) {
-        // 'prev' 변수 제거하고 직접 새 상태 값을 전달
         setPosition({ x: targetX, y: y });
         // 용암 타일 진입 시 피해 적용 (좌우 이동 시)
         const tileAtNewPosition = currentMap[y]?.[targetX];
@@ -466,7 +554,7 @@ export default function App() {
 
       return currentMap; // 업데이트된 맵 반환
     });
-  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava]); 
+  }, [position, MAP_WIDTH, BOMB_INITIAL_COUNTDOWN, DRILL_ATTACK_POWER, PLAYER_MAX_HEALTH, gamePhase, onLava, MINERAL_HEALTH]); // MINERAL_HEALTH 의존성 추가
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (gamePhase !== 'game') return; // 게임 단계가 아니면 키보드 입력 무시
@@ -553,27 +641,42 @@ export default function App() {
           }
 
           // 광물 타일 그리기
-          if (typeof tile === 'object' && tile.type !== 'bomb' && tile.type !== 'lava') { // lava 타입 추가
+          if (typeof tile === 'object' && tile.type !== 'bomb' && tile.type !== 'lava') {
             const mineralTile = tile as MineralTileObject;
-            // 고구마 타일은 이미지로 그리기
-            if (mineralTile.type === 'sweetpotato') {
-              context.drawImage(sweetpotatoImage.current, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            } else {
-              // 나머지 광물 타일은 색상으로 그리기
-              context.fillStyle = tileColors[mineralTile.type] || "gray";
-              context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            let imageToDraw: HTMLImageElement | null = null;
+
+            switch (mineralTile.type) {
+              case 'dirt':
+                imageToDraw = dirtImage.current;
+                break;
+              case 'copper':
+                imageToDraw = copperImage.current;
+                break;
+              case 'silver':
+                imageToDraw = silverImage.current;
+                break;
+              case 'gold':
+                imageToDraw = goldImage.current;
+                break;
+              case 'diamond':
+                imageToDraw = diamondImage.current;
+                break;
+              case 'sweetpotato':
+                imageToDraw = sweetpotatoImage.current;
+                break;
+              default:
+                // 기본값으로 회색 사각형을 그립니다 (이미지가 없는 경우)
+                context.fillStyle = "gray";
+                context.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                break;
+            }
+            
+            // 이미지가 있으면 이미지를 그립니다.
+            if (imageToDraw) {
+                context.drawImage(imageToDraw, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             }
 
-            // 체력 숫자 그리기
-            context.fillStyle = "white";
-            context.font = `${TILE_SIZE * 0.4}px Arial`; // 더 작은 폰트
-            context.textAlign = "center";
-            context.textBaseline = "top"; // 타일 상단에 위치
-            context.fillText(
-              mineralTile.health.toString(),
-              x * TILE_SIZE + TILE_SIZE / 2,
-              y * TILE_SIZE + TILE_SIZE * 0.1 // 상단에서 약간 오프셋
-            );
+            // 이제 체력 숫자는 그리지 않습니다.
           }
           // 폭탄 타일 그리기
           else if (typeof tile === 'object' && tile.type === 'bomb') {
@@ -619,6 +722,13 @@ export default function App() {
         ? SCROLL_THRESHOLD_Y * TILE_SIZE
         : position.y * TILE_SIZE;
 
+      // 레벨업 중 반짝임 효과 적용
+      if (isLevelingUp && blinkingState) {
+        context.globalAlpha = 0.4; // 반투명하게 (반짝임 효과)
+      } else {
+        context.globalAlpha = 1.0; // 원래대로 불투명하게
+      }
+
       context.drawImage(
         kosooniImage.current,
         position.x * TILE_SIZE,
@@ -626,6 +736,7 @@ export default function App() {
         TILE_SIZE,
         TILE_SIZE
       );
+      context.globalAlpha = 1.0; // 알파값 원복
 
       context.restore(); // 저장된 변환 상태 복원 (스케일 초기화)
 
@@ -662,10 +773,28 @@ export default function App() {
         }
       }
       context.restore(); // 저장된 변환 상태 복원
+
+      // 레벨 및 경험치 정보 표시 (상단 중앙)
+      context.fillStyle = "white";
+      context.font = "20px Arial";
+      context.textAlign = "center";
+      context.textBaseline = "top";
+      context.fillText(`Level: ${playerLevel} | XP: ${currentXP}/${xpToNextLevel}`, canvas.width / 2, 10);
+
+      // 레벨업 메시지 표시 (꼬순이 위에)
+      if (levelUpMessage) {
+        context.fillStyle = "gold";
+        context.font = "30px Arial";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        // 꼬순이 위치를 기준으로 메시지 Y 좌표 계산
+        const messageY = kosooniDisplayY + offsetY - TILE_SIZE; // 꼬순이 타일 위쪽으로
+        context.fillText(levelUpMessage, position.x * TILE_SIZE + TILE_SIZE / 2, messageY);
+      }
     };
 
     draw();
-  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, lavaImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase]);
+  }, [position, tileMap, offsetY, blinkingState, TILE_SIZE, MAP_HEIGHT, MAP_WIDTH, tileColors, kosooniImage, sweetpotatoImage, bombImage, lavaImage, dirtImage, copperImage, silverImage, goldImage, diamondImage, scrollOffset, SCROLL_THRESHOLD_Y, currentHealth, PLAYER_MAX_HEALTH, imagesLoaded, gamePhase, playerLevel, currentXP, xpToNextLevel, levelUpMessage, isLevelingUp]); // 새로운 이미지 Ref들과 레벨 관련 상태들을 의존성 배열에 추가
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
