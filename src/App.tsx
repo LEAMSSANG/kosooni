@@ -441,8 +441,9 @@ export default function App() {
   }, [
     position, explodeBomb, generateNewRow, DRILL_ATTACK_POWER,
     imagesLoaded, gamePhase, onLava, isMineralTile, isAttacking,
-    JUMP_OFFSET_DURATION, SCROLL_THRESHOLD_Y, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, // Constants added for full context, not strictly necessary for dependency re-run
-    BOMB_INITIAL_COUNTDOWN, PLAYER_MAX_HEALTH, MINERAL_HEALTH // Constants added for full context
+    JUMP_OFFSET_DURATION, SCROLL_THRESHOLD_Y, TILE_SIZE,
+    MAP_WIDTH, MAP_HEIGHT,
+    BOMB_INITIAL_COUNTDOWN, PLAYER_MAX_HEALTH, MINERAL_HEALTH
   ]);
 
 
