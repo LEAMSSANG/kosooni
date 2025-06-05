@@ -402,6 +402,7 @@ export default function App() {
           }
 
           // 플레이어 위치가 변경되었거나, 이번 틱에 낙하가 발생했을 경우에만 상태 업데이트
+          console.log(`Pre-setPosition check: newPlayerX=${newPlayerX}, position.x=${position.x}, finalPlayerY=${finalPlayerY}, position.y=${position.y}, hasFallenThisTick=${hasFallenThisTick}`);
           if (newPlayerX !== position.x || finalPlayerY !== position.y || hasFallenThisTick) {
             setPosition({ x: newPlayerX, y: finalPlayerY });
             console.log(`New Player Position after tick update: (${newPlayerX}, ${finalPlayerY})`);
@@ -844,8 +845,7 @@ export default function App() {
             <img
               src={kosooniTitleBannerImage.current.src} 
               alt="꼬순이의 대모험"
-              className="max-w-full h-auto rounded-lg shadow-lg"
-              style={{ maxWidth: '80vw', maxHeight: '80vh' }} 
+              className="w-full h-auto object-contain rounded-lg shadow-lg" // w-full로 100% 너비, object-contain으로 비율 유지
             />
           )}
         </div>
