@@ -312,7 +312,7 @@ export default function App() {
               finalPlayerY++;
               hasFallenThisTick = true;
             } else if (typeof tileDirectlyBelowFinalY === 'object' && tileDirectlyBelowFinalY.type !== 'bomb' && tileDirectlyBelowFinalY.type !== 'lava') { // 광물 타일인 경우
-              const mineralTile = tileDirectlyBelowFinalY as MineralTileObject;
+              const mineralTile = tileDirectlyBelowFinalY as MineralTileObject; 
               console.log(`Hitting mineral at (${newPlayerX}, ${finalPlayerY + 1}) with health: ${mineralTile.health}`);
               if (mineralTile.health > DRILL_ATTACK_POWER) {
                 // 체력 감소, 플레이어는 현재 위치 유지 (낙하하지 않음)
